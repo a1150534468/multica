@@ -28,7 +28,7 @@ Every icon in the product is a Multica drawing exported from `@multica/ui/icons`
   - 0 for a hard corner, which is rare.
 
   Do not hand-write `a r r` arc corners for rectangles.
-- **Arrowheads and chevrons.** Use `head(x, y, dir, depth, half)` for a soft arrowhead with its tip at (x, y). For chevrons, copy the existing `M… s…` soft curves. Never use sharp polyline arrowheads.
+- **Anything that points.** Chevrons, arrowheads, `< >` brackets, prompts and direction triangles (play, skip) turn at a sharp vertex: a straight polyline such as `M9 6L15 12 9 18`, or `head(x, y, dir, depth, half)` for an arrowhead with its tip at (x, y). Never round the tip with a curve or a `k` corner; the round stroke join is the only softening. The bend in a corner or U-turn arrow's shaft may stay rounded.
 - **Checks.** Use `tick(a, v, b)`: two straight strokes meeting at a tight vertex. Never bow a stroke through a curve where it should turn a corner; a check or any other angular mark drawn that way reads as handwriting.
 - **Dots.** `dot(x, y, r)` with r 1.1–1.5. Use dots only where they carry meaning: info, alert, eyes, status lights.
 - **Polygons and stars.** `polygon(cx, cy, radii, count, k)`.
