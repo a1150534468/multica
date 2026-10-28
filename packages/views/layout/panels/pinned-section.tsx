@@ -218,13 +218,24 @@ function SortablePinItem({
           }
           onNavigate?.();
         }}
-        className={cn(PANEL_ROW_CLASS, panelRowStateClass(active), "pr-8", isDragging && "pointer-events-none")}
+        className={cn(
+          PANEL_ROW_CLASS,
+          panelRowStateClass(active),
+          trailing ? "pr-2" : "pr-8",
+          isDragging && "pointer-events-none",
+        )}
       >
         {iconNode}
         <ShimmerText active={running} className="min-w-0 flex-1 truncate">
           {label}
         </ShimmerText>
-        {trailing}
+        {/* Holds the same right-edge slot as a tree row's avatars, and yields
+            it to the unpin button on hover. */}
+        {trailing && (
+          <span className="flex shrink-0 items-center group-hover/pin:invisible group-focus-within/pin:invisible">
+            {trailing}
+          </span>
+        )}
       </AppLink>
       <TooltipHint label={t(($) => $.sidebar.unpin_tooltip)}>
         <button
