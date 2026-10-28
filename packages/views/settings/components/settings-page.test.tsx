@@ -223,21 +223,24 @@ describe("SettingsPage workspace subscription feature flag", () => {
 });
 
 describe("SettingsPage information architecture", () => {
-  it("groups pages by who they affect, then by topic", () => {
+  it("lists pages in flat sections under a single level of headings", () => {
     renderWithI18n(<SettingsPage />);
-    const personal = within(nav()).getByRole("region", { name: /Personal/ });
+    const sections = within(nav()).getAllByRole("region");
+    expect(sections.map((section) => within(section).getByRole("heading").textContent)).toEqual([
+      "Personal",
+      "Workspace",
+      "Issues & workflow",
+      "Connections & extensions",
+    ]);
+    const personal = within(nav()).getByRole("region", { name: "Personal" });
     expect(within(personal).getByRole("link", { name: "Preferences" })).toBeInTheDocument();
     expect(within(personal).getByRole("link", { name: "API Tokens" })).toBeInTheDocument();
 
-    // The workspace group is named after the workspace it configures.
-    const workspace = within(nav()).getByRole("region", { name: /Acme/ });
-    const issues = within(workspace).getByRole("group", { name: "Issues & workflow" });
-    expect(
-      within(issues).getByRole("link", { name: "Workflows" }),
-    ).toBeInTheDocument();
-    const connections = within(workspace).getByRole("group", {
-      name: "Connections & extensions",
-    });
+    const workspace = within(nav()).getByRole("region", { name: "Workspace" });
+    expect(within(workspace).getByRole("link", { name: "Members" })).toBeInTheDocument();
+    const issues = within(nav()).getByRole("region", { name: "Issues & workflow" });
+    expect(within(issues).getByRole("link", { name: "Workflows" })).toBeInTheDocument();
+    const connections = within(nav()).getByRole("region", { name: "Connections & extensions" });
     for (const name of ["Code", "Messaging", "MCP servers"]) {
       expect(within(connections).getByRole("link", { name })).toBeInTheDocument();
     }

@@ -9,7 +9,6 @@ import {
   FolderGit2,
   Keyboard,
   KeyRound,
-  Laptop,
   ListPlus,
   Lock,
   MessagesSquare,
@@ -25,7 +24,6 @@ import {
   Workflow,
   Zap,
 } from "lucide-react";
-import { useAuthStore } from "@multica/core/auth";
 import { useCurrentWorkspace } from "@multica/core/paths";
 import { useFeatureEnabled } from "@multica/core/config";
 import { useCurrentMember } from "@multica/core/permissions";
@@ -33,13 +31,10 @@ import {
   BILLING_WORKSPACE_SUBSCRIPTIONS_FLAG,
   PLUGINS_V1_FLAG,
 } from "@multica/core/feature-flags";
-import { resolvePublicFileUrl } from "@multica/core/workspace/avatar-url";
-import { ActorAvatar } from "@multica/ui/components/common/actor-avatar";
 import { TooltipHint } from "@multica/ui/components/common/tooltip-hint";
 import { cn } from "@multica/ui/lib/utils";
 import { resolveSettingsLocation, settingsHref } from "./settings-navigation";
 import { AppLink, useNavigation } from "../../navigation";
-import { WorkspaceAvatar } from "../../workspace/workspace-avatar";
 import { AccountTab } from "./account-tab";
 import { PreferencesTab } from "./preferences-tab";
 import { TokensTab } from "./tokens-tab";
@@ -95,10 +90,8 @@ interface SettingsSubgroup {
 interface SettingsScopeGroup {
   key: "personal" | "workspace" | "device";
   label: string;
-  /** Leading mark: whose settings these are. */
-  mark: React.ReactNode;
-  /** Trailing detail (the user's name, "Workspace"). */
-  tag?: string;
+  /** Nav heading of the unlabeled first subgroup, when it differs from `label`. */
+  navLabel?: string;
   subgroups: SettingsSubgroup[];
 }
 
@@ -109,7 +102,6 @@ export function SettingsPage({ extraDeviceTabs = [] }: SettingsPageProps = {}) {
   const { t } = useT("settings");
   const workspace = useCurrentWorkspace();
   const workspaceName = workspace?.name ?? t(($) => $.page.workspace_fallback);
-  const user = useAuthStore((s) => s.user);
   const { role } = useCurrentMember(workspace?.id ?? "");
   const isMember = role === "member";
   const navigation = useNavigation();
@@ -132,15 +124,6 @@ export function SettingsPage({ extraDeviceTabs = [] }: SettingsPageProps = {}) {
     {
       key: "personal",
       label: t(($) => $.page.groups.personal),
-      mark: (
-        <ActorAvatar
-          name={user?.name ?? ""}
-          initials={(user?.name ?? "U").charAt(0).toUpperCase()}
-          avatarUrl={resolvePublicFileUrl(user?.avatar_url)}
-          size="xs"
-        />
-      ),
-      tag: user?.name,
       subgroups: [
         {
           key: "personal",
@@ -175,15 +158,7 @@ export function SettingsPage({ extraDeviceTabs = [] }: SettingsPageProps = {}) {
     {
       key: "workspace",
       label: workspaceName,
-      mark: (
-        <WorkspaceAvatar
-          name={workspaceName}
-          avatarUrl={workspace?.avatar_url}
-          size="sm"
-          className="size-4 rounded-xs"
-        />
-      ),
-      tag: t(($) => $.page.groups.workspace),
+      navLabel: t(($) => $.page.groups.workspace),
       subgroups: [
         {
           key: "workspace",
@@ -268,7 +243,6 @@ export function SettingsPage({ extraDeviceTabs = [] }: SettingsPageProps = {}) {
           {
             key: "device" as const,
             label: t(($) => $.page.groups.device),
-            mark: <Laptop aria-hidden="true" className="size-4 text-muted-foreground" />,
             subgroups: [{ key: "device", entries: extraDeviceTabs as SettingsEntry[] }],
           },
         ]
@@ -516,49 +490,26 @@ export function SettingsPage({ extraDeviceTabs = [] }: SettingsPageProps = {}) {
           {query ? (
             searchResults
           ) : (
-            <div className="divide-y divide-surface-border">
-              {groups.map((group) => (
-                <section
-                  key={group.key}
-                  aria-labelledby={`settings-group-${group.key}`}
-                  className="py-2.5 first:pt-0"
-                >
-                  <h2
-                    id={`settings-group-${group.key}`}
-                    className="flex h-8 min-w-0 items-center gap-2.5 px-3 text-label font-semibold text-foreground"
-                  >
-                    <span className="flex size-4 shrink-0 items-center justify-center">
-                      {group.mark}
-                    </span>
-                    <span className="truncate">{group.label}</span>
-                    {group.tag ? (
-                      <span className="ml-auto shrink-0 truncate text-micro font-medium text-muted-foreground">
-                        {group.tag}
-                      </span>
-                    ) : null}
-                  </h2>
-                  {group.subgroups.map((subgroup) => (
-                    <div
-                      key={subgroup.key}
-                      role={subgroup.label ? "group" : undefined}
-                      aria-labelledby={
-                        subgroup.label ? `settings-subgroup-${subgroup.key}` : undefined
-                      }
+            // One level of headings: each page names its own scope in a badge,
+            // so the nav only groups. Same section rhythm as the space panels.
+            groups.flatMap((group) =>
+              group.subgroups.map((subgroup) => {
+                const id = `settings-group-${group.key}-${subgroup.key}`;
+                return (
+                  <section key={id} aria-labelledby={id} className="mt-4 first:mt-0">
+                    <h2
+                      id={id}
+                      className="flex h-7 min-w-0 items-center px-3 text-caption font-medium text-muted-foreground"
                     >
-                      {subgroup.label ? (
-                        <h3
-                          id={`settings-subgroup-${subgroup.key}`}
-                          className="px-3 pb-1 pt-3 text-caption font-medium text-muted-foreground"
-                        >
-                          {subgroup.label}
-                        </h3>
-                      ) : null}
-                      <ul className="space-y-px">{subgroup.entries.map(navItem)}</ul>
-                    </div>
-                  ))}
-                </section>
-              ))}
-            </div>
+                      <span className="truncate">
+                        {subgroup.label ?? group.navLabel ?? group.label}
+                      </span>
+                    </h2>
+                    <ul className="space-y-px">{subgroup.entries.map(navItem)}</ul>
+                  </section>
+                );
+              }),
+            )
           )}
         </nav>
       </ListColumn>
