@@ -13,6 +13,11 @@ import type { Project } from "@multica/core/types";
 import { renderWithI18n } from "../../test/i18n";
 import { ProjectsSection } from "./work-tree";
 
+const openCreateIssue = vi.hoisted(() => vi.fn());
+vi.mock("@multica/core/issues/stores/create-mode-store", () => ({
+  openCreateIssueWithPreference: openCreateIssue,
+}));
+
 const dnd = vi.hoisted(() => ({ onDragEnd: undefined as ((event: DragEndEvent) => void) | undefined }));
 
 vi.mock("@dnd-kit/core", () => ({
@@ -104,6 +109,12 @@ describe("ProjectsSection", () => {
     const state = useSidebarTreeStore.getState();
     expect(state.projectOrder).toEqual(["p3", "p1", "p2", "p9"]);
     expect(state.projectSettings.ordering).toBe("manual");
+  });
+
+  it("creates an issue in a project from its row", () => {
+    renderSection();
+    fireEvent.click(screen.getByRole("button", { name: "New issue in Mobile" }));
+    expect(openCreateIssue).toHaveBeenCalledWith({ project_id: "p2" });
   });
 
   it("collapses from the section label", () => {

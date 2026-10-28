@@ -16,6 +16,7 @@ import {
   projectSidebarParams,
   projectSidebarSource,
 } from "@multica/core/issues/sidebar-list";
+import { openCreateIssueWithPreference } from "@multica/core/issues/stores/create-mode-store";
 import { useSidebarTreeStore } from "@multica/core/issues/stores/sidebar-tree-store";
 import { useModalStore } from "@multica/core/modals";
 import { useWorkspacePaths } from "@multica/core/paths";
@@ -210,7 +211,26 @@ function ProjectTreeItem({
           wasDragged.current = false;
           event.preventDefault();
         }}
-        trailing={showCount ? <PanelCount value={project.issue_count - project.done_count} /> : null}
+        trailing={
+          // The button takes the count's place on hover, so the row never reflows.
+          <span className="relative flex h-5 min-w-5 items-center justify-end">
+            {showCount && (
+              <PanelCount
+                value={project.issue_count - project.done_count}
+                className="transition-opacity group-focus-within/row:opacity-0 group-hover/row:opacity-0 [@media(pointer:coarse)]:opacity-0"
+              />
+            )}
+            <IconButton
+              label={t(($) => $.panels.work.new_issue_in_project, { name: project.title })}
+              size="icon-xs"
+              className="absolute -right-1 z-10 text-muted-foreground opacity-0 transition-opacity group-focus-within/row:opacity-100 group-hover/row:opacity-100 focus-visible:opacity-100 [@media(pointer:coarse)]:opacity-100"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={() => openCreateIssueWithPreference({ project_id: project.id })}
+            >
+              <Plus />
+            </IconButton>
+          </span>
+        }
       />
       {expanded && (
         <SidebarIssueList

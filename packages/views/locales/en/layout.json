@@ -83,6 +83,7 @@
       "all_issues": "All issues",
       "views": "Views",
       "new_project": "New project",
+      "new_issue_in_project": "New issue in {{name}}",
       "all_projects_one": "All {{count}} project",
       "all_projects_other": "All {{count}} projects",
       "project_issues": "Issues in {{name}}",
