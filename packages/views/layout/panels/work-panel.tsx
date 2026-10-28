@@ -3,7 +3,7 @@
 import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useStore } from "zustand";
-import { Bot, CircleUser, Layers, ListTodo, Plus, SquarePen } from "lucide-react";
+import { Bot, CircleUser, ListTodo, SquarePen } from "lucide-react";
 import { IconButton } from "@multica/ui/components/common/icon-button";
 import { useAuthStore } from "@multica/core/auth";
 import { useCurrentWorkspace, useWorkspacePaths } from "@multica/core/paths";
@@ -15,31 +15,22 @@ import {
   issueViewContainerKey,
   useActiveIssueViewStore,
 } from "@multica/core/issue-views/active-view-store";
-import { issueDetailOptions, projectOpenIssuesOptions } from "@multica/core/issues/queries";
+import { issueDetailOptions } from "@multica/core/issues/queries";
+import { projectSidebarSource, sidebarProjects } from "@multica/core/issues/sidebar-list";
+import { useSidebarTreeStore } from "@multica/core/issues/stores/sidebar-tree-store";
 import { projectListOptions } from "@multica/core/projects/queries";
-import { useProjectSidebarExpandStore } from "@multica/core/projects";
-import { useModalStore } from "@multica/core/modals";
 import { useShortcut } from "@multica/core/shortcuts";
 import type { IssueView } from "@multica/core/api/schemas";
 import type { Project } from "@multica/core/types";
 import { useNavigation } from "../../navigation";
 import { ShortcutKeycaps } from "../../common/shortcut-keycaps";
 import { useT } from "../../i18n";
-import {
-  PanelBody,
-  PanelHeader,
-  PanelLink,
-  PanelList,
-  PanelSection,
-  isPathWithin,
-} from "../panel-nav";
+import { PanelBody, PanelHeader, PanelLink, PanelList, isPathWithin } from "../panel-nav";
 import { PinnedSection, usePanelPins } from "./pinned-section";
-import { ProjectTreeItem } from "./project-tree-item";
+import { ProjectsSection, ViewsSection, useIssueShownInTree } from "./work-tree";
 
 const EMPTY_PROJECTS: Project[] = [];
 const EMPTY_VIEWS: IssueView[] = [];
-const PROJECT_PREVIEW_LIMIT = 6;
-const OPEN_PROJECT_STATUSES = new Set<Project["status"]>(["planned", "in_progress", "paused"]);
 const WORKSPACE_VIEW_SCOPE = { scope_type: "workspace" } as const;
 
 /** The `{id}` of an `/issues/{id}` route — a UUID or an identifier like `MUL-123`. */
@@ -79,29 +70,20 @@ export function WorkPanel() {
   const currentIssueId = issueSegment ? (currentIssue?.id ?? null) : null;
   const revealProjectId = issueSegment ? (currentIssue?.project_id ?? null) : null;
 
-  const expandedIds = useProjectSidebarExpandStore((s) => s.expandedIds);
-  const setProjectExpanded = useProjectSidebarExpandStore((s) => s.setExpanded);
+  const setExpanded = useSidebarTreeStore((s) => s.setExpanded);
   useEffect(() => {
-    if (revealProjectId) setProjectExpanded(revealProjectId, true);
-  }, [revealProjectId, setProjectExpanded]);
+    if (revealProjectId) setExpanded(projectSidebarSource(revealProjectId), true);
+  }, [revealProjectId, setExpanded]);
 
+  const projectSettings = useSidebarTreeStore((s) => s.projectSettings);
+  const projectOrder = useSidebarTreeStore((s) => s.projectOrder);
   const shownProjects = useMemo(() => {
-    const preview = projects
-      .filter((project) => OPEN_PROJECT_STATUSES.has(project.status))
-      .slice(0, PROJECT_PREVIEW_LIMIT);
+    const shown = sidebarProjects(projects, projectSettings, projectOrder, userId);
     const revealed = projects.find((project) => project.id === revealProjectId);
-    return revealed && !preview.includes(revealed) ? [...preview, revealed] : preview;
-  }, [projects, revealProjectId]);
-  const { data: revealedIssues } = useQuery({
-    ...projectOpenIssuesOptions(wsId ?? "", revealProjectId ?? ""),
-    enabled: false,
-  });
-  // The tree row takes the highlight from "All issues" while it shows the issue.
-  const issueLitInTree =
-    !!revealProjectId &&
-    expandedIds.includes(revealProjectId) &&
-    shownProjects.some((project) => project.id === revealProjectId) &&
-    !!revealedIssues?.some((issue) => issue.id === currentIssueId);
+    return revealed && !shown.includes(revealed) ? [...shown, revealed] : shown;
+  }, [projects, projectSettings, projectOrder, userId, revealProjectId]);
+  // A tree row takes the highlight from "All issues" while it lists the issue.
+  const issueLitInTree = useIssueShownInTree(wsId ?? "", currentIssueId);
   // Older backends without the views endpoint error here; the section hides.
   const { data: views = EMPTY_VIEWS } = useQuery({
     ...issueViewListOptions(wsId ?? "", WORKSPACE_VIEW_SCOPE),
@@ -167,58 +149,28 @@ export function WorkPanel() {
 
         {wsId && <PinnedSection pins={pins} wsId={wsId} pathname={pathname} />}
 
-        {views.length > 0 && (
-          <PanelSection label={t(($) => $.panels.work.views)}>
-            <PanelList>
-              {views.map((view) => (
-                <PanelLink
-                  key={view.id}
-                  href={`${p.issues()}?view=${view.id}`}
-                  icon={<Layers className="size-3.5" />}
-                  label={view.name}
-                  active={onIssues && activeViewId === view.id}
-                  onNavigate={() => setActiveView(viewContainerKey, view.id)}
-                />
-              ))}
-            </PanelList>
-          </PanelSection>
+        {wsId && views.length > 0 && (
+          <ViewsSection
+            wsId={wsId}
+            views={views}
+            projects={projects}
+            isActive={(view) => onIssues && activeViewId === view.id}
+            onNavigate={(view) => setActiveView(viewContainerKey, view.id)}
+            activeIssueId={plainRowsLit ? currentIssueId : null}
+          />
         )}
 
-        <PanelSection
-          label={t(($) => $.nav.projects)}
-          action={
-            <IconButton
-              label={t(($) => $.panels.work.new_project)}
-              size="icon-xs"
-              className="text-muted-foreground"
-              onClick={() => useModalStore.getState().open("create-project")}
-            >
-              <Plus />
-            </IconButton>
-          }
-        >
-          <PanelList>
-            {wsId &&
-              shownProjects.map((project) => (
-                <ProjectTreeItem
-                  key={project.id}
-                  wsId={wsId}
-                  project={project}
-                  active={plainRowsLit && isPathWithin(pathname, p.projectDetail(project.id))}
-                  expanded={expandedIds.includes(project.id)}
-                  onExpandedChange={(expanded) => setProjectExpanded(project.id, expanded)}
-                  activeIssueId={plainRowsLit ? currentIssueId : null}
-                />
-              ))}
-            <PanelLink
-              href={p.projects()}
-              icon={<span className="size-4" aria-hidden />}
-              label={t(($) => $.panels.work.all_projects, { count: projects.length })}
-              active={pathname === p.projects()}
-              className="text-caption"
-            />
-          </PanelList>
-        </PanelSection>
+        {wsId && (
+          <ProjectsSection
+            wsId={wsId}
+            userId={userId}
+            pathname={pathname}
+            projects={shownProjects}
+            totalProjects={projects.length}
+            plainRowsLit={plainRowsLit}
+            activeIssueId={plainRowsLit ? currentIssueId : null}
+          />
+        )}
       </PanelBody>
     </>
   );

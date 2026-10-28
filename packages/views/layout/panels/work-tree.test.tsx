@@ -1,0 +1,109 @@
+import type { ReactNode } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { DragEndEvent } from "@dnd-kit/core";
+import { buildIssueStatusCatalog } from "@multica/core/issue-statuses/queries";
+import {
+  DEFAULT_SIDEBAR_ISSUE_SETTINGS,
+  DEFAULT_SIDEBAR_PROJECT_SETTINGS,
+  useSidebarTreeStore,
+} from "@multica/core/issues/stores/sidebar-tree-store";
+import type { Project } from "@multica/core/types";
+import { renderWithI18n } from "../../test/i18n";
+import { ProjectsSection } from "./work-tree";
+
+const dnd = vi.hoisted(() => ({ onDragEnd: undefined as ((event: DragEndEvent) => void) | undefined }));
+
+vi.mock("@dnd-kit/core", () => ({
+  DndContext: ({ children, onDragEnd }: { children: ReactNode; onDragEnd: (event: DragEndEvent) => void }) => {
+    dnd.onDragEnd = onDragEnd;
+    return <>{children}</>;
+  },
+  PointerSensor: vi.fn(),
+  closestCenter: vi.fn(),
+  useSensor: vi.fn(),
+  useSensors: vi.fn(),
+}));
+vi.mock("@multica/core/issue-statuses/hooks", () => ({
+  useIssueStatuses: () => buildIssueStatusCatalog([]),
+}));
+vi.mock("../../navigation", () => ({
+  AppLink: ({
+    children,
+    href,
+    newTabTitle: _newTabTitle,
+    ...props
+  }: { children: ReactNode; href: string; newTabTitle?: string } & React.ComponentProps<"a">) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
+}));
+vi.mock("../../issues/components/status-icon", () => ({ StatusIcon: () => <span /> }));
+vi.mock("../../projects/components/project-icon", () => ({ ProjectIcon: () => <span /> }));
+vi.mock("@multica/ui/components/common/tooltip-hint", () => ({
+  TooltipHint: ({ children }: { children: ReactNode }) => <>{children}</>,
+}));
+vi.mock("@multica/core/paths", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@multica/core/paths")>();
+  return { ...actual, useWorkspacePaths: () => actual.paths.workspace("acme") };
+});
+
+const project = (id: string, title: string): Project =>
+  ({ id, title, status: "in_progress", issue_count: 4, done_count: 1 }) as Project;
+const PROJECTS = [project("p1", "Desktop"), project("p2", "Mobile"), project("p3", "Web")];
+
+beforeEach(() => {
+  useSidebarTreeStore.setState({
+    expanded: [],
+    issueSettings: DEFAULT_SIDEBAR_ISSUE_SETTINGS,
+    projectSettings: { ...DEFAULT_SIDEBAR_PROJECT_SETTINGS, ordering: "name" },
+    projectOrder: ["p9"],
+    projectsCollapsed: false,
+  });
+});
+
+function renderSection() {
+  const qc = new QueryClient({ defaultOptions: { queries: { enabled: false } } });
+  renderWithI18n(
+    <QueryClientProvider client={qc}>
+      <ProjectsSection
+        wsId="ws-1"
+        userId="u1"
+        pathname="/acme/issues"
+        projects={PROJECTS}
+        totalProjects={4}
+        plainRowsLit
+        activeIssueId={null}
+      />
+    </QueryClientProvider>,
+  );
+}
+
+describe("ProjectsSection", () => {
+  it("swaps a project's count for the issue settings once it expands", () => {
+    renderSection();
+    expect(screen.getAllByText("3")).toHaveLength(3);
+    expect(screen.queryByRole("button", { name: "Issue display" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Issues in Mobile" }));
+    expect(useSidebarTreeStore.getState().expanded).toEqual(["project:p2"]);
+    expect(screen.getAllByText("3")).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "Issue display" })).toBeInTheDocument();
+  });
+
+  it("drops into a manual order, keeping hidden projects after the shown ones", () => {
+    renderSection();
+    dnd.onDragEnd?.({ active: { id: "p3" }, over: { id: "p1" } } as DragEndEvent);
+    const state = useSidebarTreeStore.getState();
+    expect(state.projectOrder).toEqual(["p3", "p1", "p2", "p9"]);
+    expect(state.projectSettings.ordering).toBe("manual");
+  });
+
+  it("collapses from the section label", () => {
+    renderSection();
+    fireEvent.click(screen.getByRole("button", { name: "Projects" }));
+    expect(useSidebarTreeStore.getState().projectsCollapsed).toBe(true);
+  });
+});

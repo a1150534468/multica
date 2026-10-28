@@ -575,16 +575,16 @@ export function rollbackIssueChange(
 /**
  * Refresh the aggregate projections a single-entity patch cannot recompute:
  * assignee-grouped boards (regrouping is server logic), every Project Gantt
- * (schedule membership + row mirrors), and project metrics plus per-project
- * open-issue lists when the change could shift what a project counts as open.
+ * (schedule membership + row mirrors), and project metrics plus sidebar
+ * lists when the change could shift per-project counts.
  */
 export function invalidateIssueDerivatives(
   qc: QueryClient,
   wsId: string,
   opts: {
     statusOrProjectChanged: boolean;
-    /** Narrower than `statusOrProjectChanged` when the caller knows what moved. */
-    openMembershipChanged?: boolean;
+    /** False when the caller refreshes the sidebar lists it can target. */
+    refreshSidebar?: boolean;
   },
 ) {
   qc.invalidateQueries({ queryKey: issueKeys.assigneeGroupsAll(wsId) });
@@ -593,9 +593,34 @@ export function invalidateIssueDerivatives(
   if (opts.statusOrProjectChanged) {
     qc.invalidateQueries({ queryKey: projectKeys.all(wsId) });
   }
-  if (opts.openMembershipChanged ?? opts.statusOrProjectChanged) {
-    qc.invalidateQueries({ queryKey: issueKeys.projectOpenAll(wsId) });
+  if (opts.refreshSidebar ?? opts.statusOrProjectChanged) {
+    qc.invalidateQueries({ queryKey: issueKeys.sidebarAll(wsId) });
   }
+}
+
+/**
+ * Refresh the sidebar lists one issue change can reorder or move it across:
+ * lists showing it, its old and new project's lists, and every view list
+ * (view membership is a server-side filter the client cannot re-evaluate).
+ */
+export function invalidateSidebarListsForIssue(
+  qc: QueryClient,
+  wsId: string,
+  issueId: string,
+  projectIds: readonly (string | null | undefined)[],
+) {
+  const projectSources = new Set(projectIds.filter(Boolean).map((id) => `project:${id}`));
+  const prefix = issueKeys.sidebarAll(wsId);
+  qc.invalidateQueries({
+    queryKey: prefix,
+    predicate: (query) => {
+      const source = query.queryKey[prefix.length];
+      if (typeof source !== "string") return false;
+      if (source.startsWith("view:") || projectSources.has(source)) return true;
+      const data = query.state.data as ListIssuesResponse | undefined;
+      return !!data?.issues?.some((issue) => issue.id === issueId);
+    },
+  });
 }
 
 /** True when any object part of a query key encodes the requested ordering.

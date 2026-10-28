@@ -126,11 +126,14 @@ export const issueKeys = {
       projectId,
       assigneeTypes ?? null,
     ] as const,
-  /** All per-project open-issue lists — prefix for cross-project refresh. */
-  projectOpenAll: (wsId: string) => [...issueKeys.all(wsId), "project-open"] as const,
-  /** A project's unfinished issues (the sidebar's expanded project). */
-  projectOpen: (wsId: string, projectId: string) =>
-    [...issueKeys.projectOpenAll(wsId), projectId] as const,
+  /** Every sidebar issue list — prefix for cross-list refresh. */
+  sidebarAll: (wsId: string) => [...issueKeys.all(wsId), "sidebar"] as const,
+  /**
+   * One expanded sidebar row's issues. `source` (`project:{id}` / `view:{id}`)
+   * sits at a fixed index so realtime refresh can target a project's lists.
+   */
+  sidebar: (wsId: string, source: string, params: ListIssuesParams, limit: number) =>
+    [...issueKeys.sidebarAll(wsId), source, params, limit] as const,
   detail: (wsId: string, id: string) =>
     [...issueKeys.all(wsId), "detail", id] as const,
   /** Resolve a bare issue identifier (e.g. "MUL-123") to an issue. */
@@ -453,15 +456,16 @@ export function projectGanttIssuesOptions(
   });
 }
 
-/**
- * Every unfinished issue in a project — the same non-terminal predicate the
- * project's `done_count` excludes, so the list matches its open count.
- */
-export function projectOpenIssuesOptions(wsId: string, projectId: string) {
+/** The first `limit` issues of a sidebar list, with the filtered total. */
+export function sidebarIssuesOptions(
+  wsId: string,
+  source: string,
+  params: ListIssuesParams,
+  limit: number,
+) {
   return queryOptions({
-    queryKey: issueKeys.projectOpen(wsId, projectId),
-    queryFn: async () =>
-      (await api.listIssues({ project_id: projectId, open_only: true })).issues,
+    queryKey: issueKeys.sidebar(wsId, source, params, limit),
+    queryFn: () => api.listIssues({ ...params, limit, offset: 0 }),
   });
 }
 

@@ -12,7 +12,6 @@ export {
   type ProjectColumnKey,
   type ProjectListFilters,
 } from "./stores/view-store";
-export { useProjectSidebarExpandStore } from "./stores/sidebar-expand-store";
 export {
   projectResourceKeys,
   projectResourcesOptions,

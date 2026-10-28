@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useRef } from "react";
+import { ChevronDown } from "lucide-react";
 import { cn } from "@multica/ui/lib/utils";
 import { useScrollFade } from "@multica/ui/hooks/use-scroll-fade";
 import { AppLink } from "../navigation";
@@ -66,23 +67,51 @@ export function PanelBody({ children }: { children: React.ReactNode }) {
 export function PanelSection({
   label,
   action,
+  collapsed,
+  onCollapsedChange,
   children,
 }: {
   label: string;
   /** Rendered at the end of the label row (e.g. a create button). */
   action?: React.ReactNode;
+  /** With `onCollapsedChange`, the label toggles the section's content. */
+  collapsed?: boolean;
+  onCollapsedChange?: (collapsed: boolean) => void;
   children: React.ReactNode;
 }) {
   const id = useId();
+  const contentId = useId();
+  const collapsible = !!onCollapsedChange;
   return (
     <section aria-labelledby={id} className="mt-4">
-      <div className="flex h-7 items-center gap-1 pl-3 pr-1">
+      <div className="group/section flex h-7 items-center gap-1 pl-3 pr-1">
         <h3 id={id} className="min-w-0 flex-1 truncate text-caption font-medium text-muted-foreground">
-          {label}
+          {collapsible ? (
+            <button
+              type="button"
+              aria-expanded={!collapsed}
+              aria-controls={collapsed ? undefined : contentId}
+              onClick={() => onCollapsedChange(!collapsed)}
+              className="-mx-1 flex max-w-full items-center gap-0.5 rounded-md px-1 outline-none hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              <span className="truncate">{label}</span>
+              <ChevronDown
+                aria-hidden
+                className={cn(
+                  "size-3.5 shrink-0 transition-[transform,opacity] duration-150 ease-out motion-reduce:transition-none",
+                  collapsed
+                    ? "-rotate-90"
+                    : "opacity-0 group-hover/section:opacity-100 group-focus-within/section:opacity-100",
+                )}
+              />
+            </button>
+          ) : (
+            label
+          )}
         </h3>
         {action}
       </div>
-      {children}
+      {!collapsed && <div id={contentId}>{children}</div>}
     </section>
   );
 }
