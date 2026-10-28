@@ -25,4 +25,13 @@ describe("useSidebarTreeStore", () => {
     store.setExpanded("project:p1", false);
     expect(useSidebarTreeStore.getState().expanded).toEqual([]);
   });
+
+  it("collapses each section on its own", () => {
+    useSidebarTreeStore.setState({ viewsCollapsed: false, pinnedCollapsed: false, projectsCollapsed: false });
+    useSidebarTreeStore.getState().setPinnedCollapsed(true);
+    const state = useSidebarTreeStore.getState();
+    expect([state.viewsCollapsed, state.pinnedCollapsed, state.projectsCollapsed]).toEqual([false, true, false]);
+    state.setViewsCollapsed(true);
+    expect(useSidebarTreeStore.getState().viewsCollapsed).toBe(true);
+  });
 });

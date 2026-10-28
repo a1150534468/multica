@@ -22,6 +22,7 @@ import { issueStatusCategory } from "@multica/core/issues";
 import { issueDetailOptions } from "@multica/core/issues/queries";
 import { projectDetailOptions } from "@multica/core/projects/queries";
 import { pinListOptions } from "@multica/core/pins/queries";
+import { useSidebarTreeStore } from "@multica/core/issues/stores/sidebar-tree-store";
 import { useDeletePin, useReorderPins } from "@multica/core/pins/mutations";
 import { useWorkspacePaths, type WorkspacePaths } from "@multica/core/paths";
 import type { PinnedItem } from "@multica/core/types";
@@ -87,7 +88,9 @@ export function usePanelPins(
     pin.item_type === "issue"
       ? pin.item_id === currentIssueId
       : isPathWithin(pathname, pinHref(p, pin));
-  const isActivePinnedRoute = displayed.some(isPinActive);
+  // A collapsed section shows no rows, so it must not keep the tree unlit.
+  const pinnedCollapsed = useSidebarTreeStore((s) => s.pinnedCollapsed);
+  const isActivePinnedRoute = !pinnedCollapsed && displayed.some(isPinActive);
 
   return {
     visible,
@@ -111,6 +114,8 @@ export function PinnedSection({ pins, wsId }: { pins: PanelPins; wsId: string })
   const reorderPins = useReorderPins();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const { visible, displayed, expanded, setExpanded, setLocalPinned, isDraggingRef, viewPins, isPinActive } = pins;
+  const collapsed = useSidebarTreeStore((s) => s.pinnedCollapsed);
+  const setCollapsed = useSidebarTreeStore((s) => s.setPinnedCollapsed);
 
   const handleDragStart = useCallback(() => {
     isDraggingRef.current = true;
@@ -133,7 +138,11 @@ export function PinnedSection({ pins, wsId }: { pins: PanelPins; wsId: string })
   if (visible.length === 0) return null;
 
   return (
-    <PanelSection label={t(($) => $.sidebar.pinned_label)}>
+    <PanelSection
+      label={t(($) => $.sidebar.pinned_label)}
+      collapsed={collapsed}
+      onCollapsedChange={setCollapsed}
+    >
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         <SortableContext items={displayed.map((pin) => pin.id)} strategy={verticalListSortingStrategy}>
           <PanelList>

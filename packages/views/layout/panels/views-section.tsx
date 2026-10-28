@@ -86,6 +86,8 @@ export function ViewsSection({
   const { data: allViews = EMPTY_VIEWS } = useQuery(issueViewEverywhereOptions(wsId));
   const [deleteTarget, setDeleteTarget] = useState<IssueView | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  const collapsed = useSidebarTreeStore((s) => s.viewsCollapsed);
+  const setCollapsed = useSidebarTreeStore((s) => s.setViewsCollapsed);
 
   const onDragEnd = useCallback(
     ({ active, over }: DragEndEvent) => {
@@ -102,19 +104,23 @@ export function ViewsSection({
   return (
     <PanelSection
       label={t(($) => $.panels.work.views)}
+      collapsed={collapsed}
+      onCollapsedChange={setCollapsed}
       action={
         <IconButton
           label={t(($) => $.panels.work.new_view)}
           size="icon-xs"
           className="text-muted-foreground"
-          onClick={() =>
+          onClick={() => {
+            // The new view is named inline in this list, so it has to be open.
+            setCollapsed(false);
             actions.create({
               scope: WORKSPACE_SCOPE,
               scopeVariant: null,
               definition: issueViewSeedDefinition({ query: {}, display: {} }),
               renameIn: "sidebar",
-            })
-          }
+            });
+          }}
         >
           <Plus />
         </IconButton>

@@ -53,16 +53,26 @@ interface SidebarTreeState {
   /** Manual project order; projects missing from it follow in list order. */
   projectOrder: string[];
   projectsCollapsed: boolean;
+  viewsCollapsed: boolean;
+  pinnedCollapsed: boolean;
   setExpanded: (key: string, expanded: boolean) => void;
   setIssueSettings: (patch: Partial<SidebarIssueSettings>) => void;
   setProjectSettings: (patch: Partial<SidebarProjectSettings>) => void;
   setProjectOrder: (ids: string[]) => void;
   setProjectsCollapsed: (collapsed: boolean) => void;
+  setViewsCollapsed: (collapsed: boolean) => void;
+  setPinnedCollapsed: (collapsed: boolean) => void;
 }
 
 type PersistedSidebarTree = Pick<
   SidebarTreeState,
-  "expanded" | "issueSettings" | "projectSettings" | "projectOrder" | "projectsCollapsed"
+  | "expanded"
+  | "issueSettings"
+  | "projectSettings"
+  | "projectOrder"
+  | "projectsCollapsed"
+  | "viewsCollapsed"
+  | "pinnedCollapsed"
 >;
 
 const INITIAL: PersistedSidebarTree = {
@@ -71,6 +81,8 @@ const INITIAL: PersistedSidebarTree = {
   projectSettings: DEFAULT_SIDEBAR_PROJECT_SETTINGS,
   projectOrder: [],
   projectsCollapsed: false,
+  viewsCollapsed: false,
+  pinnedCollapsed: false,
 };
 
 export const useSidebarTreeStore = create<SidebarTreeState>()(
@@ -86,6 +98,8 @@ export const useSidebarTreeStore = create<SidebarTreeState>()(
       setProjectSettings: (patch) => set((s) => ({ projectSettings: { ...s.projectSettings, ...patch } })),
       setProjectOrder: (ids) => set({ projectOrder: ids }),
       setProjectsCollapsed: (collapsed) => set({ projectsCollapsed: collapsed }),
+      setViewsCollapsed: (collapsed) => set({ viewsCollapsed: collapsed }),
+      setPinnedCollapsed: (collapsed) => set({ pinnedCollapsed: collapsed }),
     }),
     {
       name: "multica_sidebar_tree",
@@ -96,6 +110,8 @@ export const useSidebarTreeStore = create<SidebarTreeState>()(
         projectSettings: state.projectSettings,
         projectOrder: state.projectOrder,
         projectsCollapsed: state.projectsCollapsed,
+        viewsCollapsed: state.viewsCollapsed,
+        pinnedCollapsed: state.pinnedCollapsed,
       }),
       // A workspace switch rehydrates into the previous workspace's state:
       // start from the initial values, never from `current`'s data.

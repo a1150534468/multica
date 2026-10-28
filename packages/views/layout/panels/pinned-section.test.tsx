@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@multica/core/api";
 import { buildIssueStatusCatalog } from "@multica/core/issue-statuses/queries";
 import type { PinnedItem } from "@multica/core/types";
+import { useSidebarTreeStore } from "@multica/core/issues/stores/sidebar-tree-store";
 import { renderWithI18n } from "../../test/i18n";
 import { PinnedSection, usePanelPins } from "./pinned-section";
 
@@ -87,6 +88,7 @@ beforeEach(() => {
   state.detail = { isPending: false, isError: false, data: null, error: null };
   state.deletePin.mockReset();
   activePinnedRoute = false;
+  useSidebarTreeStore.setState({ pinnedCollapsed: false });
 });
 
 describe("PinnedSection", () => {
@@ -137,6 +139,24 @@ describe("PinnedSection", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Show fewer" }));
     expect(lastPin()).toBeNull();
+  });
+
+  it("collapses from the section label and stops claiming the active route", async () => {
+    state.detail = {
+      isPending: false,
+      isError: false,
+      data: { identifier: "MUL-123", title: "Keep this pin", status: "todo" },
+      error: null,
+    };
+    renderWithI18n(<Harness pathname="/acme/issues/MUL-123" currentIssueId="issue-1" />);
+    await screen.findByText("Keep this pin");
+    expect(activePinnedRoute).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Pinned" }));
+    expect(useSidebarTreeStore.getState().pinnedCollapsed).toBe(true);
+    expect(screen.queryByText("Keep this pin")).toBeNull();
+    expect(screen.getByRole("button", { name: "Pinned" })).toHaveAttribute("aria-expanded", "false");
+    expect(activePinnedRoute).toBe(false);
   });
 
   it("renders nothing without pins", () => {
