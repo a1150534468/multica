@@ -335,10 +335,10 @@ describe("InboxPage", () => {
     );
   });
 
-  it("keeps the inbox tab's unread count static", () => {
+  it("keeps the title unread count static", () => {
     reset();
-    render(<InboxPage />);
-    const titleCount = screen.getAllByRole("tab")[0]?.querySelector(
+    const { container } = render(<InboxPage />);
+    const titleCount = container.querySelector("h1")?.parentElement?.querySelector(
       "number-flow-react",
     ) as (HTMLElement & { animated?: boolean }) | null;
 
@@ -564,20 +564,21 @@ describe("InboxPage", () => {
     expect(screen.getByTestId("row").textContent).toBe("archived-1");
   });
 
-  it("switches between the inbox and the archive from the header tabs", () => {
+  it("switches between the inbox and the archive from the title menu", async () => {
     reset();
     layout.width = DESKTOP;
     searchParams = new URLSearchParams("issue=issue-1");
     listData.active = [item({ id: "active-1", issue_id: "issue-1" })];
-    render(<InboxPage />);
+    const { container } = render(<InboxPage />);
 
-    // The test's `useT` labels every tab "Inbox", so they are located by order.
-    const [inboxTab, archivedTab] = screen.getAllByRole("tab");
-    expect(inboxTab).toHaveAttribute("aria-selected", "true");
-    fireEvent.click(archivedTab!);
+    const titleMenu = container.querySelector("h1 [aria-haspopup='menu']") as HTMLElement;
+    fireEvent.click(titleMenu);
+    // The test's `useT` labels every option "Inbox", so they are located by order.
+    const [inboxOption, archivedOption] = await screen.findAllByRole("menuitemradio");
+    expect(inboxOption).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(archivedOption!);
 
     expect(replace).toHaveBeenLastCalledWith("/acme/inbox?view=archived");
-    expect(archivedTab).toHaveAttribute("aria-selected", "true");
     expect(screen.getByTestId("list").dataset.view).toBe("archived");
   });
 
@@ -586,12 +587,13 @@ describe("InboxPage", () => {
     // archived list would read as "archive all of these" and do the opposite.
     reset();
     listData.archived = [item({ id: "archived-1", archived: true })];
+    const batchMenu = ':not(h1) > [aria-haspopup="menu"]';
     const { container: mainView } = render(<InboxPage />);
-    expect(mainView.querySelector('[aria-haspopup="menu"]')).not.toBeNull();
+    expect(mainView.querySelector(batchMenu)).not.toBeNull();
 
     searchParams = new URLSearchParams("view=archived");
     const { container: archivedView } = render(<InboxPage />);
-    expect(archivedView.querySelector('[aria-haspopup="menu"]')).toBeNull();
+    expect(archivedView.querySelector(batchMenu)).toBeNull();
   });
 
   it("ignores a carried-over idle selection in the archive", () => {

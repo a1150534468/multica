@@ -29,7 +29,7 @@ export function PanelHeader({
   meta,
   children,
 }: {
-  title: string;
+  title: React.ReactNode;
   as?: "h1" | "h2";
   /** Before the title: the nav trigger on pages that also render below `md`. */
   leading?: React.ReactNode;
@@ -42,7 +42,16 @@ export function PanelHeader({
     <div className="flex h-12 shrink-0 items-center gap-1 pl-5 pr-2">
       {leading}
       <div className="flex min-w-0 flex-1 items-center gap-2">
-        <Heading className="truncate text-title-sm font-semibold">{title}</Heading>
+        {/* A control passed as the title truncates its own label; clipping
+            here would also cut off its hover background. */}
+        <Heading
+          className={cn(
+            "text-title-sm font-semibold",
+            typeof title === "string" ? "truncate" : "flex min-w-0",
+          )}
+        >
+          {title}
+        </Heading>
         {meta}
       </div>
       {children}

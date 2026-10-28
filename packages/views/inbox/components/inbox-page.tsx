@@ -66,6 +66,7 @@ import {
   Archive,
   ArchiveRestore,
   BookCheck,
+  ChevronDown,
   ListChecks,
   ArrowLeft,
 } from "@multica/ui/icons";
@@ -79,12 +80,13 @@ import {
 } from "@multica/ui/components/ui/tooltip";
 import { Skeleton } from "@multica/ui/components/ui/skeleton";
 import { NumberFlow } from "@multica/ui/components/ui/number-flow";
-import { Tabs, TabsList, TabsTrigger } from "@multica/ui/components/ui/tabs";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
 } from "@multica/ui/components/ui/dropdown-menu";
 import { useIsCompact } from "@multica/ui/hooks/use-mobile";
@@ -607,8 +609,50 @@ export function InboxPage() {
   const listHeader = (
     <PanelHeader
       as="h1"
-      title={t(($) => $.page.title)}
+      title={
+        // The archive is a second list of the same page, so the title doubles
+        // as the switch between the two instead of costing a row of its own.
+        <DropdownMenu>
+          <DropdownMenuTrigger className="-ml-1.5 mr-1.5 flex min-w-0 items-center gap-1 rounded-md px-1.5 py-0.5 outline-none transition-colors hover:bg-accent/60 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring aria-expanded:bg-accent/60">
+            <span className="min-w-0 truncate">
+              {isArchivedView ? t(($) => $.list.archived_title) : t(($) => $.page.title)}
+            </span>
+            <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-auto min-w-44">
+            <DropdownMenuRadioGroup
+              value={view}
+              onValueChange={(value) => setView(value as InboxView)}
+            >
+              <DropdownMenuRadioItem value="inbox">
+                <Inbox className="h-4 w-4" />
+                <span className="flex-1">{t(($) => $.page.title)}</span>
+                {unreadCount > 0 && (
+                  <span className="text-caption tabular-nums text-muted-foreground">
+                    {unreadCount}
+                  </span>
+                )}
+              </DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="archived">
+                <Archive className="h-4 w-4" />
+                {t(($) => $.list.archived_title)}
+              </DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      }
       leading={<CollapsedNavTrigger />}
+      meta={
+        !isArchivedView && unreadCount > 0 && (
+          <NumberFlow
+            value={unreadCount}
+            animated={false}
+            format={{ maximumFractionDigits: 0 }}
+            aria-label={String(unreadCount)}
+            className="text-caption text-muted-foreground"
+          />
+        )
+      }
     >
       <InboxFilterMenu
         wsId={wsId}
@@ -655,34 +699,6 @@ export function InboxPage() {
       </DropdownMenu>
       )}
     </PanelHeader>
-  );
-
-  // The two lists are siblings, so the switch between them stays pinned under
-  // the header instead of scrolling away with either list.
-  const viewTabs = (
-    <Tabs
-      value={view}
-      onValueChange={(value) => setView(value as InboxView)}
-      className="shrink-0 border-b pl-2 pr-3"
-    >
-      <TabsList variant="line" aria-label={t(($) => $.page.title)}>
-        <TabsTrigger value="inbox" className="flex-none px-2">
-          {t(($) => $.page.title)}
-          {unreadCount > 0 && (
-            <NumberFlow
-              value={unreadCount}
-              animated={false}
-              format={{ maximumFractionDigits: 0 }}
-              aria-label={String(unreadCount)}
-              className="text-caption tabular-nums text-muted-foreground"
-            />
-          )}
-        </TabsTrigger>
-        <TabsTrigger value="archived" className="flex-none px-2">
-          {t(($) => $.list.archived_title)}
-        </TabsTrigger>
-      </TabsList>
-    </Tabs>
   );
 
   const list = isArchivedView && archivedError ? (
@@ -736,7 +752,6 @@ export function InboxPage() {
   const listPanel = (
     <>
       {listHeader}
-      {viewTabs}
       {lookupLoading && (
         <p role="status" className="shrink-0 border-b px-3 py-2 text-caption text-muted-foreground">
           {t(($) => $.list.loading_selection)}
