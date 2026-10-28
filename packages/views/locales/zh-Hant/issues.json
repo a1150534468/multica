@@ -743,7 +743,6 @@
     "trigger_wakeup": "由喚醒觸發 · {{condition}}",
     "trigger_image": "[圖片]",
     "summary_runs_other": "{{count}} 次執行",
-    "latest": "最近",
     "open_timeline": "開啟時間線",
     "more_runs_other": "顯示其餘 {{count}} 次執行",
     "strip_aria": "每次執行的費用——開啟執行時間線",

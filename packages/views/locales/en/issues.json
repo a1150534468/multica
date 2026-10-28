@@ -774,7 +774,6 @@
     "trigger_image": "[Image]",
     "summary_runs_one": "{{count}} run",
     "summary_runs_other": "{{count}} runs",
-    "latest": "Latest",
     "open_timeline": "Open timeline",
     "more_runs_one": "Show {{count}} more",
     "more_runs_other": "Show {{count}} more",

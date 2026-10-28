@@ -181,14 +181,6 @@ export function ExecutionLogSection({ issueId, identifier, issueTitle }: Executi
             </div>
           )}
           {latest.length > 0 && <div className="space-y-0.5">
-            {(activeTasks.length > 0 || hiddenCount > 0) && (
-              <div className="flex h-6 items-center justify-between gap-2 px-2">
-                <p className="truncate text-micro text-muted-foreground">{t(($) => $.execution_log.latest)}</p>
-                {hiddenCount > 0 && <button type="button" onClick={openRuns} className="-mr-1.5 shrink-0 rounded-sm px-1.5 py-0.5 text-micro text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">
-                  {t(($) => $.execution_log.more_runs, { count: hiddenCount })}
-                </button>}
-              </div>
-            )}
             {latest.map((task) => <PastRow key={task.id} task={task} issueId={issueId} />)}
           </div>}
         </div>

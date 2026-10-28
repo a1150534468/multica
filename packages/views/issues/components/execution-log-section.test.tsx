@@ -492,7 +492,8 @@ describe("execution log past runs", () => {
     expect(chart.querySelectorAll("[data-run]")[29]).toHaveAttribute("data-run", "past-35");
     expect(screen.getByText("Spent", { selector: "dt" }).parentElement).toHaveTextContent("$70.00");
     expect(screen.getAllByText(/^Past run \d+$/)).toHaveLength(3);
-    fireEvent.click(screen.getByRole("button", { name: "Show 32 more" }));
+    expect(screen.queryByText("Latest")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open timeline · Show 32 more" }));
     expect(screen.getByRole("heading", { name: "Runs" })).toBeInTheDocument();
   });
 

@@ -773,7 +773,6 @@
     "trigger_image": "[Image]",
     "summary_runs_one": "{{count}} exécution",
     "summary_runs_other": "{{count}} exécutions",
-    "latest": "Récentes",
     "open_timeline": "Ouvrir la chronologie",
     "more_runs_one": "Afficher {{count}} de plus",
     "more_runs_other": "Afficher {{count}} de plus",
