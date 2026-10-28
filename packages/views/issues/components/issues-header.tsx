@@ -1632,6 +1632,11 @@ export function IssueFilterMenu({
   );
 }
 
+// Hover never fills an unpressed chip: in light mode `muted` and `accent` are
+// the same grey, so a hover fill reads as selected.
+const DISPLAY_CHIP_CLASS =
+  "h-6 rounded-md px-2 text-caption text-muted-foreground hover:border-foreground/25 hover:bg-transparent hover:text-foreground aria-pressed:border-transparent aria-pressed:bg-input aria-pressed:text-foreground aria-pressed:hover:bg-input/70";
+
 const LAYOUTS: { mode: ViewMode; Icon: typeof List }[] = [
   { mode: "board", Icon: Columns3 },
   { mode: "list", Icon: List },
@@ -1917,7 +1922,7 @@ export function IssueDisplayControls({
                     pressed={layout === mode}
                     onPressedChange={() => act.setViewMode(mode)}
                     title={t(($) => $.view[mode])}
-                    className="h-auto min-w-0 flex-col gap-1 rounded-md px-0.5 py-1.5 text-caption font-normal text-muted-foreground hover:bg-background/60 aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-sm"
+                    className="h-auto min-w-0 flex-col gap-1 rounded-md px-0.5 py-1.5 text-caption font-normal text-muted-foreground hover:bg-transparent hover:text-foreground aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-sm aria-pressed:hover:bg-background"
                   >
                     <Icon className="size-4" />
                     <span className="max-w-full truncate">{t(($) => $.view[mode])}</span>
@@ -2134,7 +2139,7 @@ export function IssueDisplayControls({
                         onPressedChange={(pressed) =>
                           pressed ? act.showStatus(option.key) : act.hideStatus(option.key)
                         }
-                        className="h-6 max-w-40 gap-1.5 rounded-md px-2 text-caption text-muted-foreground hover:bg-muted/60 aria-pressed:border-transparent aria-pressed:bg-accent aria-pressed:text-accent-foreground aria-pressed:hover:bg-accent/80"
+                        className={cn(DISPLAY_CHIP_CLASS, "max-w-40 gap-1.5")}
                       >
                         <StatusIcon
                           status={option.key}
@@ -2206,7 +2211,7 @@ export function IssueDisplayControls({
                         variant="outline"
                         pressed={cardProperties[opt.key]}
                         onPressedChange={() => act.toggleCardProperty(opt.key)}
-                        className="h-6 rounded-md px-2 text-caption text-muted-foreground hover:bg-muted/60 aria-pressed:border-transparent aria-pressed:bg-accent aria-pressed:text-accent-foreground aria-pressed:hover:bg-accent/80"
+                        className={DISPLAY_CHIP_CLASS}
                       >
                         {t(($) => $.display[CARD_PROPERTY_LABEL_KEY[opt.key]])}
                       </Toggle>
@@ -2218,7 +2223,7 @@ export function IssueDisplayControls({
                         variant="outline"
                         pressed={cardPropertyIds.includes(property.id)}
                         onPressedChange={() => act.toggleCardPropertyId(property.id)}
-                        className="h-6 max-w-40 rounded-md px-2 text-caption text-muted-foreground hover:bg-muted/60 aria-pressed:border-transparent aria-pressed:bg-accent aria-pressed:text-accent-foreground aria-pressed:hover:bg-accent/80"
+                        className={cn(DISPLAY_CHIP_CLASS, "max-w-40")}
                       >
                         <span className="truncate">{property.name}</span>
                       </Toggle>
