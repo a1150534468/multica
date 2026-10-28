@@ -2,7 +2,6 @@
 
 import { cloneElement, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowUpDown,
   CalendarDays,
   ChartGantt,
   ChevronDown,
@@ -112,6 +111,7 @@ import { NO_PROPERTY_VALUE } from "../utils/filter";
 import { matchesPinyin } from "../../editor/extensions/pinyin-match";
 import { FILTER_ITEM_CLASS, HoverCheck } from "../../common/hover-check";
 import { TableColumnPicker } from "./table-view";
+import { DisplayChip, SortDirectionButton } from "./display-parts";
 
 type LocalDateRange = {
   from: Date | undefined;
@@ -1632,11 +1632,6 @@ export function IssueFilterMenu({
   );
 }
 
-// Hover never fills an unpressed chip: in light mode `muted` and `accent` are
-// the same grey, so a hover fill reads as selected.
-const DISPLAY_CHIP_CLASS =
-  "h-6 rounded-md px-2 text-caption text-muted-foreground hover:border-foreground/25 hover:bg-transparent hover:text-foreground aria-pressed:border-transparent aria-pressed:bg-input aria-pressed:text-foreground aria-pressed:hover:bg-input/70";
-
 const LAYOUTS: { mode: ViewMode; Icon: typeof List }[] = [
   { mode: "board", Icon: Columns3 },
   { mode: "list", Icon: List },
@@ -1952,7 +1947,7 @@ export function IssueDisplayControls({
                       if (v) act.setGrouping(v as IssueGrouping);
                     }}
                   >
-                    <SelectTrigger size="sm" className="w-32" aria-label={t(($) => $.display.grouping_section)}>
+                    <SelectTrigger size="sm" className="w-36" aria-label={t(($) => $.display.grouping_section)}>
                       <SelectValue>{groupingLabel}</SelectValue>
                     </SelectTrigger>
                     <SelectContent align="end">
@@ -1987,7 +1982,7 @@ export function IssueDisplayControls({
                       if (v) act.setSwimlaneGrouping(v as SwimlaneGrouping);
                     }}
                   >
-                    <SelectTrigger size="sm" className="w-32" aria-label={t(($) => $.display.grouping_section)}>
+                    <SelectTrigger size="sm" className="w-36" aria-label={t(($) => $.display.grouping_section)}>
                       <SelectValue>{swimlaneGroupingLabel}</SelectValue>
                     </SelectTrigger>
                     <SelectContent align="end">
@@ -2023,7 +2018,7 @@ export function IssueDisplayControls({
                       if (v) act.setTableGrouping(v as TableGrouping);
                     }}
                   >
-                    <SelectTrigger size="sm" className="w-32" aria-label={t(($) => $.display.grouping_section)}>
+                    <SelectTrigger size="sm" className="w-36" aria-label={t(($) => $.display.grouping_section)}>
                       <SelectValue>{tableGroupingLabel}</SelectValue>
                     </SelectTrigger>
                     <SelectContent align="end">
@@ -2049,24 +2044,10 @@ export function IssueDisplayControls({
                 </span>
                 <div className="flex min-w-0 items-center gap-1">
                   {sortBy !== "position" && (
-                    <Tooltip>
-                      <TooltipTrigger
-                        render={
-                          <Button
-                            variant="outline"
-                            size="icon-sm"
-                            className="text-muted-foreground"
-                            onClick={() =>
-                              act.setSortDirection(sortDirection === "asc" ? "desc" : "asc")
-                            }
-                            aria-label={sortDirectionLabel}
-                          >
-                            <ArrowUpDown className="size-3.5" />
-                          </Button>
-                        }
-                      />
-                      <TooltipContent side="bottom">{sortDirectionLabel}</TooltipContent>
-                    </Tooltip>
+                    <SortDirectionButton
+                      label={sortDirectionLabel}
+                      onClick={() => act.setSortDirection(sortDirection === "asc" ? "desc" : "asc")}
+                    />
                   )}
                   <Select
                     items={[
@@ -2084,7 +2065,7 @@ export function IssueDisplayControls({
                       if (v) act.setSortBy(v as SortField);
                     }}
                   >
-                    <SelectTrigger size="sm" className="w-32" aria-label={t(($) => $.display.ordering_section)}>
+                    <SelectTrigger size="sm" className="w-36" aria-label={t(($) => $.display.ordering_section)}>
                       <SelectValue>{sortLabel}</SelectValue>
                     </SelectTrigger>
                     <SelectContent align="end">
@@ -2130,16 +2111,13 @@ export function IssueDisplayControls({
                       these, so the chips lock rather than flip to no effect. */}
                   <div className="mt-2 flex flex-wrap gap-1">
                     {columnOptions.map((option) => (
-                      <Toggle
+                      <DisplayChip
                         key={option.key}
-                        size="sm"
-                        variant="outline"
                         pressed={!hiddenStatuses.includes(option.key)}
                         disabled={statusFilters.length > 0}
                         onPressedChange={(pressed) =>
                           pressed ? act.showStatus(option.key) : act.hideStatus(option.key)
                         }
-                        className={cn(DISPLAY_CHIP_CLASS, "max-w-40 gap-1.5")}
                       >
                         <StatusIcon
                           status={option.key}
@@ -2149,7 +2127,7 @@ export function IssueDisplayControls({
                           className="size-3 shrink-0"
                         />
                         <span className="truncate">{option.label}</span>
-                      </Toggle>
+                      </DisplayChip>
                     ))}
                   </div>
                   {statusFilters.length > 0 && (
@@ -2187,7 +2165,7 @@ export function IssueDisplayControls({
                       <Button
                         variant="outline"
                         size="sm"
-                        className="w-32 justify-between border-input pr-2 pl-2.5 text-body font-normal"
+                        className="w-36 justify-between border-input pr-2 pl-2.5 text-body font-normal"
                       >
                         {t(($) => $.display.columns_shown, { count: tableColumnCount })}
                         <ChevronDown className="size-4 text-muted-foreground" />
@@ -2205,28 +2183,22 @@ export function IssueDisplayControls({
                       dim so the active set reads at a glance. */}
                   <div className="mt-2 flex flex-wrap gap-1">
                     {availableCardPropertyOptions.map((opt) => (
-                      <Toggle
+                      <DisplayChip
                         key={opt.key}
-                        size="sm"
-                        variant="outline"
                         pressed={cardProperties[opt.key]}
                         onPressedChange={() => act.toggleCardProperty(opt.key)}
-                        className={DISPLAY_CHIP_CLASS}
                       >
                         {t(($) => $.display[CARD_PROPERTY_LABEL_KEY[opt.key]])}
-                      </Toggle>
+                      </DisplayChip>
                     ))}
                     {workspaceProperties.map((property) => (
-                      <Toggle
+                      <DisplayChip
                         key={property.id}
-                        size="sm"
-                        variant="outline"
                         pressed={cardPropertyIds.includes(property.id)}
                         onPressedChange={() => act.toggleCardPropertyId(property.id)}
-                        className={cn(DISPLAY_CHIP_CLASS, "max-w-40")}
                       >
                         <span className="truncate">{property.name}</span>
-                      </Toggle>
+                      </DisplayChip>
                     ))}
                   </div>
                 </div>

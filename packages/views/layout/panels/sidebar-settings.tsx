@@ -18,6 +18,7 @@ import {
 } from "@multica/core/issues/stores/sidebar-tree-store";
 import { PROJECT_STATUS_CONFIG, PROJECT_STATUS_ORDER } from "@multica/core/projects/config";
 import type { ProjectStatus } from "@multica/core/types";
+import { DisplayChip, SortDirectionButton } from "../../issues/components/display-parts";
 import { StatusIcon } from "../../issues/components/status-icon";
 import { sortDirectionLabelKey } from "../../issues/utils/sort-direction";
 import { useProjectStatusLabels } from "../../projects/components/labels";
@@ -58,36 +59,6 @@ function SwitchField({ label, checked, onChange }: { label: string; checked: boo
       <Caption>{label}</Caption>
       <Switch size="sm" checked={checked} onCheckedChange={onChange} />
     </label>
-  );
-}
-
-/** A filter chip: a solid outline and tint when on, dashed and faded when off. */
-function FilterChip({
-  selected,
-  onChange,
-  icon,
-  label,
-}: {
-  selected: boolean;
-  onChange: (selected: boolean) => void;
-  icon: React.ReactNode;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={selected}
-      onClick={() => onChange(!selected)}
-      className={cn(
-        "inline-flex h-6 max-w-40 items-center gap-1.5 rounded-md border px-2 text-caption transition-colors outline-none focus-visible:outline-2 focus-visible:outline-ring",
-        selected
-          ? "border-foreground/25 bg-foreground/[0.06] text-foreground hover:bg-foreground/10"
-          : "border-dashed border-input text-faint-foreground hover:bg-surface-hover hover:text-muted-foreground",
-      )}
-    >
-      <span className={cn("flex shrink-0 transition-[opacity,filter]", !selected && "opacity-40 grayscale")}>{icon}</span>
-      <span className="truncate">{label}</span>
-    </button>
   );
 }
 
@@ -138,7 +109,7 @@ function ProjectsGroup() {
 
   return (
     <section className="space-y-3">
-      <h3 className="text-label font-semibold">{t(($) => $.nav.projects)}</h3>
+      <h3 className="text-label font-medium text-foreground">{t(($) => $.nav.projects)}</h3>
       <Field label={t(($) => $.panels.work.projects_ordering)}>
         <SortSelect
           label={t(($) => $.panels.work.projects_ordering)}
@@ -160,13 +131,14 @@ function ProjectsGroup() {
         <Caption>{t(($) => $.panels.work.projects_show)}</Caption>
         <div className="mt-2 flex flex-wrap gap-1">
           {PROJECT_STATUS_ORDER.map((status) => (
-            <FilterChip
+            <DisplayChip
               key={status}
-              selected={settings.statuses.includes(status)}
-              onChange={(on) => toggleStatus(status, on)}
-              label={statusLabels[status]}
-              icon={<span aria-hidden className={cn("size-1.5 rounded-full", PROJECT_STATUS_CONFIG[status].dotColor)} />}
-            />
+              pressed={settings.statuses.includes(status)}
+              onPressedChange={(on) => toggleStatus(status, on)}
+            >
+              <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", PROJECT_STATUS_CONFIG[status].dotColor)} />
+              <span className="truncate">{statusLabels[status]}</span>
+            </DisplayChip>
           ))}
         </div>
       </div>
@@ -203,46 +175,41 @@ function ProjectIssuesGroup({ wsId }: { wsId: string }) {
   ];
 
   return (
-    <section className="space-y-3">
-      <h3 className="text-label font-semibold">{t(($) => $.panels.work.project_issues_settings)}</h3>
-      <div>
-        <Caption>{ti(($) => $.display.ordering_section)}</Caption>
-        <div className="mt-2 flex items-center gap-1.5">
+    <section className="mt-5 space-y-3">
+      <h3 className="text-label font-medium text-foreground">{t(($) => $.panels.work.project_issues_settings)}</h3>
+      <Field label={ti(($) => $.display.ordering_section)}>
+        <div className="flex min-w-0 items-center gap-1">
+          <SortDirectionButton
+            label={directionLabel}
+            onClick={() => update({ sortDirection: settings.sortDirection === "asc" ? "desc" : "asc" })}
+          />
           <SortSelect
             label={ti(($) => $.display.ordering_section)}
             value={settings.sortBy}
             options={ISSUE_SORTS.map((o) => ({ value: o.value, label: ti(($) => $.display[o.label]) }))}
             onChange={(sortBy) => update({ sortBy })}
-            className="min-w-0 flex-1"
+            className="w-36"
           />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => update({ sortDirection: settings.sortDirection === "asc" ? "desc" : "asc" })}
-          >
-            {directionLabel}
-          </Button>
         </div>
-      </div>
+      </Field>
       <div>
         <Caption>{t(($) => $.panels.work.settings_status)}</Caption>
         <div className="mt-2 flex flex-wrap gap-1">
           {statusCatalog.activeStatuses.map((status) => (
-            <FilterChip
+            <DisplayChip
               key={status.key}
-              selected={shown.has(status.key)}
-              onChange={(on) => toggleStatus(status.key, on)}
-              label={statusCatalog.labelOf(status.key)}
-              icon={
-                <StatusIcon
-                  status={status.key}
-                  category={status.category}
-                  color={statusCatalog.colorOf(status.key)}
-                  icon={statusCatalog.iconOf(status.key)}
-                  className="size-3"
-                />
-              }
-            />
+              pressed={shown.has(status.key)}
+              onPressedChange={(on) => toggleStatus(status.key, on)}
+            >
+              <StatusIcon
+                status={status.key}
+                category={status.category}
+                color={statusCatalog.colorOf(status.key)}
+                icon={statusCatalog.iconOf(status.key)}
+                className="size-3 shrink-0"
+              />
+              <span className="truncate">{statusCatalog.labelOf(status.key)}</span>
+            </DisplayChip>
           ))}
         </div>
       </div>
@@ -252,7 +219,7 @@ function ProjectIssuesGroup({ wsId }: { wsId: string }) {
           value={settings.assignee}
           options={assigneeOptions}
           onChange={(assignee) => update({ assignee })}
-          className="w-32"
+          className="w-36"
         />
       </Field>
       <SwitchField
@@ -302,13 +269,13 @@ export function ProjectsSectionSettings({ wsId, className }: { wsId: string; cla
         side="right"
         align="start"
         sideOffset={8}
-        className="max-h-(--available-height) w-72 gap-0 overflow-y-auto p-3"
+        className="max-h-(--available-height) w-80 gap-0 overflow-y-auto p-3"
       >
+        {/* Spacing separates sections — no dividers, as in the Display panel. */}
         <ProjectsGroup />
-        <div className="-mx-3 my-3 border-t border-surface-border" />
         <ProjectIssuesGroup wsId={wsId} />
         {changed && (
-          <div className="-mx-3 mt-3 flex justify-end border-t border-surface-border px-1.5 pt-2">
+          <div className="-mr-1.5 mt-4 flex justify-end">
             <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={reset}>
               {t(($) => $.panels.work.reset)}
             </Button>
