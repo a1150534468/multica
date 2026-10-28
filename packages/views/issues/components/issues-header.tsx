@@ -60,6 +60,7 @@ import {
   PRIORITY_DISPLAY_ORDER,
 } from "@multica/core/issues/config";
 import { StatusIcon, PriorityIcon } from ".";
+import { useFilterChips, type FilterChip } from "./filter-chips-bar";
 import { useQuery } from "@tanstack/react-query";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { memberListOptions, agentListOptions, squadListOptions } from "@multica/core/workspace/queries";
@@ -1154,6 +1155,14 @@ export function ViewRefreshIndicator({ active }: { active: boolean }) {
   );
 }
 
+/** What a dimension is filtering on, in its row of the filter menu. */
+function FilterTriggerValue({ chip }: { chip: FilterChip | undefined }) {
+  if (!chip) return null;
+  return (
+    <span className="ml-3 max-w-40 truncate text-caption font-medium text-primary">{chip.value}</span>
+  );
+}
+
 /**
  * The full filter menu (every dimension, search, counts) behind a caller-
  * supplied trigger. Counts follow `scopedIssues` — pass nothing to hide
@@ -1247,6 +1256,10 @@ export function IssueFilterMenu({
       viewBaseline,
     ) > 0;
   const fixedTitle = viewBaseline ? t(($) => $.filters.in_view) : undefined;
+  const { chips } = useFilterChips(showDateFilter ? dateFilter : null, onDateFilterChange, viewBaseline);
+  const chipByKey = new Map(chips.map((chip) => [chip.key, chip]));
+  const [activeAtOpen, setActiveAtOpen] = useState<ReadonlySet<string> | null>(null);
+  const activeKeys = activeAtOpen ?? new Set(chipByKey.keys());
   const dateFilterLabel = showDateFilter && dateFilter
     ? `${t(($) => $.filters[DATE_FIELD_LABEL_KEY[dateFilter.field]])}: ${
         dateFilter.from === dateFilter.to
@@ -1255,43 +1268,15 @@ export function IssueFilterMenu({
       }`
     : null;
 
-  // Base UI's render-prop merges its own ref with ours, so cloning the
-  // caller's element only adds the ref we need for rect capture.
-  const anchoredTrigger = freezeAnchor
-    ? cloneElement(trigger, { ref: triggerRef } as Partial<React.HTMLAttributes<HTMLElement>>)
-    : trigger;
-
-  return (
-    <DropdownMenu
-      onOpenChange={(open) => {
-        if (freezeAnchor) {
-          if (open && triggerRef.current) {
-            const rect = triggerRef.current.getBoundingClientRect();
-            setFrozenAnchor({ getBoundingClientRect: () => rect });
-          } else if (!open) {
-            setFrozenAnchor(null);
-          }
-        }
-        if (!open) onTableFacetChange?.(null);
-        onOpenChange?.(open);
-      }}
-    >
-      {tooltip ? (
-        <Tooltip>
-          <DropdownMenuTrigger render={<TooltipTrigger render={anchoredTrigger} />} />
-          <TooltipContent side="bottom">{tooltip}</TooltipContent>
-        </Tooltip>
-      ) : (
-        <DropdownMenuTrigger render={anchoredTrigger} />
-      )}
-          <DropdownMenuContent align={align} className="w-auto" anchor={frozenAnchor ?? undefined}>
-            {leadingSections && (
-              <>
-                {leadingSections}
-                <DropdownMenuSeparator />
-              </>
-            )}
+  // One list of dimensions rendered in two passes: the ones already
+  // filtering on first, then the rest. Membership is taken when the menu
+  // opens, so a row never jumps out from under the pointer mid-edit.
+  const inPass = (key: string, pass: "active" | "rest") =>
+    activeKeys.has(key) === (pass === "active");
+  const renderFieldSections = (pass: "active" | "rest") => (
+          <>
             {/* Status */}
+            {inPass("status", pass) && (
             <DropdownMenuSub
               onOpenChange={(open) =>
                 onTableFacetChange?.(open ? { kind: "status" } : null)
@@ -1300,11 +1285,7 @@ export function IssueFilterMenu({
               <DropdownMenuSubTrigger>
                 <CircleDot className="size-3.5" />
                 <span className="flex-1">{t(($) => $.filters.section_status)}</span>
-                {statusFilters.length > 0 && (
-                  <span className="text-caption text-primary font-medium">
-                    {statusFilters.length}
-                  </span>
-                )}
+                <FilterTriggerValue chip={chipByKey.get("status")} />
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent className="w-auto min-w-48">
                 {/* Options come from the workspace catalog, so a custom status
@@ -1345,8 +1326,10 @@ export function IssueFilterMenu({
                 })}
               </DropdownMenuSubContent>
             </DropdownMenuSub>
+            )}
 
             {/* Priority */}
+            {inPass("priority", pass) && (
             <DropdownMenuSub
               onOpenChange={(open) =>
                 onTableFacetChange?.(open ? { kind: "priority" } : null)
@@ -1355,11 +1338,7 @@ export function IssueFilterMenu({
               <DropdownMenuSubTrigger>
                 <SignalHigh className="size-3.5" />
                 <span className="flex-1">{t(($) => $.filters.section_priority)}</span>
-                {priorityFilters.length > 0 && (
-                  <span className="text-caption text-primary font-medium">
-                    {priorityFilters.length}
-                  </span>
-                )}
+                <FilterTriggerValue chip={chipByKey.get("priority")} />
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent className="w-auto min-w-44">
                 {PRIORITY_DISPLAY_ORDER.map((p) => {
@@ -1388,8 +1367,9 @@ export function IssueFilterMenu({
                 })}
               </DropdownMenuSubContent>
             </DropdownMenuSub>
+            )}
 
-            {showDateFilter && onDateFilterChange && (
+            {showDateFilter && onDateFilterChange && inPass("date", pass) && (
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger>
                   <CalendarDays className="size-3.5" />
@@ -1410,6 +1390,7 @@ export function IssueFilterMenu({
             )}
 
             {/* Assignee */}
+            {inPass("assignee", pass) && (
             <DropdownMenuSub
               onOpenChange={(open) =>
                 onTableFacetChange?.(open ? { kind: "assignee" } : null)
@@ -1418,11 +1399,7 @@ export function IssueFilterMenu({
               <DropdownMenuSubTrigger>
                 <User className="size-3.5" />
                 <span className="flex-1">{t(($) => $.filters.section_assignee)}</span>
-                {(assigneeFilters.length > 0 || includeNoAssignee) && (
-                  <span className="text-caption text-primary font-medium">
-                    {assigneeFilters.length + (includeNoAssignee ? 1 : 0)}
-                  </span>
-                )}
+                <FilterTriggerValue chip={chipByKey.get("assignee")} />
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent className="w-auto min-w-52 p-0">
                 <ActorSubContent
@@ -1439,8 +1416,10 @@ export function IssueFilterMenu({
                 />
               </DropdownMenuSubContent>
             </DropdownMenuSub>
+            )}
 
             {/* Creator */}
+            {inPass("creator", pass) && (
             <DropdownMenuSub
               onOpenChange={(open) =>
                 onTableFacetChange?.(open ? { kind: "creator" } : null)
@@ -1449,11 +1428,7 @@ export function IssueFilterMenu({
               <DropdownMenuSubTrigger>
                 <UserPen className="size-3.5" />
                 <span className="flex-1">{t(($) => $.filters.section_creator)}</span>
-                {creatorFilters.length > 0 && (
-                  <span className="text-caption text-primary font-medium">
-                    {creatorFilters.length}
-                  </span>
-                )}
+                <FilterTriggerValue chip={chipByKey.get("creator")} />
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent className="w-auto min-w-52 p-0">
                 <ActorSubContent
@@ -1466,8 +1441,10 @@ export function IssueFilterMenu({
                 />
               </DropdownMenuSubContent>
             </DropdownMenuSub>
+            )}
 
             {/* Project */}
+            {inPass("project", pass) && (
             <DropdownMenuSub
               onOpenChange={(open) =>
                 onTableFacetChange?.(open ? { kind: "project" } : null)
@@ -1476,11 +1453,7 @@ export function IssueFilterMenu({
               <DropdownMenuSubTrigger>
                 <FolderKanban className="size-3.5" />
                 <span className="flex-1">{t(($) => $.filters.section_project)}</span>
-                {(projectFilters.length > 0 || includeNoProject) && (
-                  <span className="text-caption text-primary font-medium">
-                    {projectFilters.length + (includeNoProject ? 1 : 0)}
-                  </span>
-                )}
+                <FilterTriggerValue chip={chipByKey.get("project")} />
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent className="w-auto min-w-52 p-0">
                 <ProjectSubContent
@@ -1496,19 +1469,17 @@ export function IssueFilterMenu({
                 />
               </DropdownMenuSubContent>
             </DropdownMenuSub>
+            )}
 
             {/* Project status — a dimension of its own next to Project:
                 "everything in the projects that are in progress", without
                 naming them one by one. */}
+            {inPass("projectStatus", pass) && (
             <DropdownMenuSub>
               <DropdownMenuSubTrigger>
                 <CircleDashed className="size-3.5" />
                 <span className="flex-1">{t(($) => $.filters.section_project_status)}</span>
-                {projectStatusFilters.length > 0 && (
-                  <span className="text-caption text-primary font-medium">
-                    {projectStatusFilters.length}
-                  </span>
-                )}
+                <FilterTriggerValue chip={chipByKey.get("projectStatus")} />
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent className="w-auto min-w-52 p-0">
                 <ProjectStatusSubContent
@@ -1519,8 +1490,10 @@ export function IssueFilterMenu({
                 />
               </DropdownMenuSubContent>
             </DropdownMenuSub>
+            )}
 
             {/* Label */}
+            {inPass("label", pass) && (
             <DropdownMenuSub
               onOpenChange={(open) =>
                 onTableFacetChange?.(open ? { kind: "label" } : null)
@@ -1529,11 +1502,7 @@ export function IssueFilterMenu({
               <DropdownMenuSubTrigger>
                 <Tag className="size-3.5" />
                 <span className="flex-1">{t(($) => $.filters.section_label)}</span>
-                {labelFilters.length > 0 && (
-                  <span className="text-caption text-primary font-medium">
-                    {labelFilters.length}
-                  </span>
-                )}
+                <FilterTriggerValue chip={chipByKey.get("label")} />
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent className="w-auto min-w-52 p-0">
                 <LabelSubContent
@@ -1545,10 +1514,11 @@ export function IssueFilterMenu({
                 />
               </DropdownMenuSubContent>
             </DropdownMenuSub>
+            )}
 
             {/* Custom properties — one sub per filterable definition */}
-            {filterableProperties.length > 0 && <DropdownMenuSeparator />}
-            {filterableProperties.map((property) => {
+            {pass === "rest" && filterableProperties.some((p) => inPass(`property:${p.id}`, pass)) && <DropdownMenuSeparator />}
+            {filterableProperties.filter((property) => inPass(`property:${property.id}`, pass)).map((property) => {
               const selected = propertyFilters[property.id] ?? [];
               return (
                 <DropdownMenuSub
@@ -1568,11 +1538,7 @@ export function IssueFilterMenu({
                       <SlidersHorizontal className="size-3.5" />
                     )}
                     <span className="flex-1 truncate">{property.name}</span>
-                    {selected.length > 0 && (
-                      <span className="text-caption text-primary font-medium">
-                        {selected.length}
-                      </span>
-                    )}
+                    <FilterTriggerValue chip={chipByKey.get(`property:${property.id}`)} />
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent className="w-auto min-w-44 p-1">
                     <PropertyFilterOptions
@@ -1588,6 +1554,57 @@ export function IssueFilterMenu({
                 </DropdownMenuSub>
               );
             })}
+
+          </>
+  );
+
+  // Base UI's render-prop merges its own ref with ours, so cloning the
+  // caller's element only adds the ref we need for rect capture.
+  const anchoredTrigger = freezeAnchor
+    ? cloneElement(trigger, { ref: triggerRef } as Partial<React.HTMLAttributes<HTMLElement>>)
+    : trigger;
+
+  return (
+    <DropdownMenu
+      onOpenChange={(open) => {
+        if (freezeAnchor) {
+          if (open && triggerRef.current) {
+            const rect = triggerRef.current.getBoundingClientRect();
+            setFrozenAnchor({ getBoundingClientRect: () => rect });
+          } else if (!open) {
+            setFrozenAnchor(null);
+          }
+        }
+        setActiveAtOpen(open ? new Set(chipByKey.keys()) : null);
+        if (!open) onTableFacetChange?.(null);
+        onOpenChange?.(open);
+      }}
+    >
+      {tooltip ? (
+        <Tooltip>
+          <DropdownMenuTrigger render={<TooltipTrigger render={anchoredTrigger} />} />
+          <TooltipContent side="bottom">{tooltip}</TooltipContent>
+        </Tooltip>
+      ) : (
+        <DropdownMenuTrigger render={anchoredTrigger} />
+      )}
+          <DropdownMenuContent align={align} className="w-auto" anchor={frozenAnchor ?? undefined}>
+            {leadingSections && (
+              <>
+                {leadingSections}
+                <DropdownMenuSeparator />
+              </>
+            )}
+            {activeKeys.size > 0 && (
+              <>
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>{t(($) => $.filters.active_section)}</DropdownMenuLabel>
+                  {renderFieldSections("active")}
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+              </>
+            )}
+            {renderFieldSections("rest")}
 
             {/* Reset */}
             {hasActiveFilters && (
@@ -1625,11 +1642,14 @@ export function IssueDisplayControls({
   onTableFacetChange,
   viewBaseline,
   hideFilter = false,
+  compact = false,
 }: {
   scopedIssues: Issue[];
   hideViewToggle?: boolean;
   /** The host renders its own filter trigger (the view header's chip row). */
   hideFilter?: boolean;
+  /** Icon-only controls, for a header that has run out of room. */
+  compact?: boolean;
   dateFilter?: IssueDateFilter | null;
   onDateFilterChange?: (filter: IssueDateFilter | null) => void;
   /** Open saved view: menu marks the view's values checked-and-disabled;
@@ -1806,6 +1826,7 @@ export function IssueDisplayControls({
           ? t(($) => $.table.columns.project)
           : t(($) => $.table.group_none);
   const controlButtonClass = "h-8 w-8 gap-1 px-0 text-muted-foreground md:h-7 md:w-auto md:px-2.5";
+  const controlLabelClass = compact ? "sr-only" : "hidden md:inline @max-3xl/issue-header:hidden";
 
   return (
     <div className="flex shrink-0 items-center gap-1">
@@ -1854,7 +1875,7 @@ export function IssueDisplayControls({
                   className={controlButtonClass}
                 >
                   <Rows3 className="size-3.5" />
-                  <span className="hidden md:inline @max-3xl/issue-header:hidden">
+                  <span className={controlLabelClass}>
                     {effectiveTableGrouping === "none"
                       ? t(($) => $.table.group_label)
                       : t(($) => $.table.group_active, {
@@ -1912,7 +1933,7 @@ export function IssueDisplayControls({
                 className={controlButtonClass}
               >
                 <Columns3 className="size-3.5" />
-                <span className="hidden md:inline @max-3xl/issue-header:hidden">
+                <span className={controlLabelClass}>
                   {t(($) => $.table.columns.section)}
                 </span>
                 <ChevronDown className="size-3 text-muted-foreground" />
@@ -1930,7 +1951,7 @@ export function IssueDisplayControls({
                   render={
                     <Button variant="outline" size="sm" className={controlButtonClass}>
                       <SlidersHorizontal className="size-3.5" />
-                      <span className="hidden md:inline @max-3xl/issue-header:hidden">{t(($) => $.display.button)}</span>
+                      <span className={controlLabelClass}>{t(($) => $.display.button)}</span>
                     </Button>
                   }
                 />
@@ -2198,7 +2219,7 @@ export function IssueDisplayControls({
                         ) : (
                           <List className="size-3.5" />
                         )}
-                        <span className="hidden md:inline @max-3xl/issue-header:hidden">
+                        <span className={controlLabelClass}>
                           {viewMode === "board"
                             ? t(($) => $.view.board)
                             : viewMode === "table"

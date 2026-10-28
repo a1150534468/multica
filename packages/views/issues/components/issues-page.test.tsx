@@ -800,15 +800,16 @@ describe("IssuesPage (shared)", () => {
     await screen.findByText("No issues yet");
   });
 
-  it("shows the assignee type as a chip only once it narrows the list", async () => {
+  it("counts the assignee type as a filter only once it narrows the list", async () => {
     const { unmount } = renderWithQuery(<IssuesPage />);
     await screen.findByRole("heading", { name: "All issues" });
-    expect(screen.queryByText("Assigned to agents")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Filter" })).toBeInTheDocument();
     unmount();
 
     mockScope = "agents";
     renderWithQuery(<IssuesPage />);
-    expect(await screen.findAllByText("Assigned to agents")).not.toHaveLength(0);
+    await screen.findByRole("heading", { name: "All issues" });
+    expect(screen.getByRole("button", { name: "1 filter" })).toBeInTheDocument();
   });
 
   // The Members/Agents tabs filter server-side via assignee_types (the same

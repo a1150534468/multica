@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useStore } from "zustand";
 import { toast } from "sonner";
 import {
@@ -18,6 +18,7 @@ import {
   Plus,
   Star,
   EyeOff,
+  Filter,
   Trash2,
   Users,
 } from "@multica/ui/icons";
@@ -70,11 +71,12 @@ import { PageHeader } from "../layout/page-header";
 import { RefreshablePageIcon } from "../layout/refreshable-page-icon";
 import { ProjectIcon } from "../projects/components/project-icon";
 import { IssueDisplayControls, IssueFilterMenu } from "../issues/components/issues-header";
+import { useFilterChips } from "../issues/components/filter-chips-bar";
 import { WorkspaceAgentWorkingChip } from "../issues/components/workspace-agent-working-chip";
 import type { IssueSurfaceController } from "../issues/surface/use-issue-surface-controller";
 import { useT } from "../i18n";
 import { DeleteViewDialog } from "./delete-view-dialog";
-import { FoldingFilterChips, ScopeChip } from "./folding-filter-chips";
+import { useCrowdedLevel } from "./use-crowded";
 import { useIssueViewActions } from "./use-view-actions";
 import { ViewNameInput } from "./view-name-input";
 
@@ -217,34 +219,36 @@ export function IssueViewHeader({
       ],
     );
 
-  let scopeChip: ReactNode = null;
-  let scopeMenu: ReactNode = null;
+  // The surface's scope axis heads the filter menu: who the issues are
+  // assigned to, or how they relate to me. A saved view fixes it, so there it
+  // is a read-only row.
+  let scopeSection: ReactNode = null;
+  let scopeCounts = false;
   if (activeView) {
     const variant = activeView.scope_variant;
-    if (base.kind === "my") {
-      scopeChip = (
-        <ScopeChip
-          label={t(($) => $.save_view.scope_label_my)}
-          value={variant ?? "any"}
-          options={[{ value: variant ?? "any", label: myRelationLabel(variant ?? "any") }]}
-          readOnlyHint={t(($) => $.views.set_by_view)}
-        />
-      );
-    } else if (actorKindForViewVariant(variant) !== "all") {
-      const kind = actorKindForViewVariant(variant);
-      scopeChip = (
-        <ScopeChip
-          label={t(($) => $.save_view.scope_label_workspace)}
-          value={kind}
-          options={[{ value: kind, label: assigneeTypeLabel(kind) }]}
-          readOnlyHint={t(($) => $.views.set_by_view)}
-        />
+    const fixedScope =
+      base.kind === "my"
+        ? { label: t(($) => $.save_view.scope_label_my), value: myRelationLabel(variant ?? "any") }
+        : actorKindForViewVariant(variant) !== "all"
+          ? {
+              label: t(($) => $.save_view.scope_label_workspace),
+              value: assigneeTypeLabel(actorKindForViewVariant(variant)),
+            }
+          : null;
+    if (fixedScope) {
+      scopeCounts = base.kind !== "my";
+      scopeSection = (
+        <DropdownMenuItem disabled title={t(($) => $.views.set_by_view)}>
+          <Users className="size-3.5" />
+          <span className="flex-1">{fixedScope.label}</span>
+          <span className="ml-3 text-caption font-medium text-muted-foreground">{fixedScope.value}</span>
+        </DropdownMenuItem>
       );
     }
   } else if (base.kind === "my") {
     if (myScope !== "agents") {
-      scopeChip = (
-        <ScopeChip
+      scopeSection = (
+        <ScopeSub
           label={t(($) => $.save_view.scope_label_my)}
           value={myScope}
           options={MY_RELATIONS.map((value) => ({ value, label: myRelationLabel(value === "all" ? "any" : value) }))}
@@ -253,50 +257,50 @@ export function IssueViewHeader({
       );
     }
   } else {
-    if (assigneeType !== "all") {
-      scopeChip = (
-        <ScopeChip
-          label={t(($) => $.save_view.scope_label_workspace)}
-          value={assigneeType}
-          options={ASSIGNEE_TYPES.map((value) => ({ value, label: assigneeTypeLabel(value) }))}
-          onChange={setAssigneeType}
-        />
-      );
-    }
-    scopeMenu = (
-      <DropdownMenuSub>
-        <DropdownMenuSubTrigger>
-          <Users className="size-3.5" />
-          <span className="flex-1">{t(($) => $.save_view.scope_label_workspace)}</span>
-          {assigneeType !== "all" && (
-            <span className="text-caption font-medium text-primary">1</span>
-          )}
-        </DropdownMenuSubTrigger>
-        <DropdownMenuSubContent className="w-auto min-w-44">
-          <DropdownMenuRadioGroup value={assigneeType} onValueChange={(value) => setAssigneeType(value as IssuesScope)}>
-            {ASSIGNEE_TYPES.map((value) => (
-              <DropdownMenuRadioItem key={value} value={value}>
-                {assigneeTypeLabel(value)}
-              </DropdownMenuRadioItem>
-            ))}
-          </DropdownMenuRadioGroup>
-        </DropdownMenuSubContent>
-      </DropdownMenuSub>
+    scopeCounts = assigneeType !== "all";
+    scopeSection = (
+      <ScopeSub
+        label={t(($) => $.save_view.scope_label_workspace)}
+        value={assigneeType}
+        options={ASSIGNEE_TYPES.map((value) => ({ value, label: assigneeTypeLabel(value) }))}
+        onChange={setAssigneeType}
+        active={scopeCounts}
+      />
     );
   }
+
+  const { chips: filterChips } = useFilterChips(dateFilter, setDateFilter);
+  const filterCount = filterChips.length + (scopeCounts ? 1 : 0);
+  const viewMode = useViewStore((s) => s.viewMode);
+  const zoneRef = useRef<HTMLDivElement>(null);
+  // Step 1 folds the display controls to icons, step 2 the agents chip and
+  // New issue as well; the title only truncates after both.
+  const crowding = useCrowdedLevel(
+    zoneRef,
+    2,
+    [
+      activeView?.name ?? baseName,
+      renaming,
+      dirty,
+      filterCount > 0,
+      viewMode,
+      agentRunningFilter,
+      controller.workingAgents?.length ?? -1,
+    ].join("|"),
+  );
 
   const title = (
     <>
       <RefreshablePageIcon refreshing={controller.isRefreshing}>
         {activeView ? <Layers className="size-4" /> : baseIcon}
       </RefreshablePageIcon>
-      <span className="min-w-0 truncate">{activeView ? activeView.name : baseName}</span>
+      <span data-fit-truncate className="min-w-0 truncate">{activeView ? activeView.name : baseName}</span>
     </>
   );
 
   return (
     <PageHeader className="@container/issue-header">
-      <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-clip">
+      <div ref={zoneRef} className="flex min-w-0 flex-1 items-center gap-2 overflow-x-clip">
         {renaming && activeView ? (
           <span className="flex min-w-0 shrink-0 items-center gap-2">
             <Layers className="size-4 shrink-0 text-muted-foreground" />
@@ -405,28 +409,38 @@ export function IssueViewHeader({
           </DropdownMenu>
         )}
 
-        <FoldingFilterChips
+        <IssueFilterMenu
+          align="start"
+          trigger={
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn(
+                "h-7 shrink-0 gap-1.5 px-2 text-muted-foreground",
+                filterCount > 0 && "text-foreground",
+              )}
+              aria-label={
+                filterCount > 0
+                  ? t(($) => $.views.filter_count, { count: filterCount })
+                  : t(($) => $.views.filter)
+              }
+            >
+              <Filter className="size-3.5" />
+              <span className="@max-md/issue-header:hidden">{t(($) => $.views.filter)}</span>
+              {filterCount > 0 && (
+                <span className="rounded-sm bg-brand/10 px-1 text-caption font-medium tabular-nums text-brand">
+                  {filterCount}
+                </span>
+              )}
+            </Button>
+          }
+          leadingSections={scopeSection}
+          scopedIssues={controller.surfaceIssues}
+          facetCountsExact={controller.facetCountsExact}
+          tableFacetCounts={controller.tableFacetCounts}
+          onTableFacetChange={controller.setActiveTableFacet}
           dateFilter={dateFilter}
           onDateFilterChange={setDateFilter}
-          leading={scopeChip}
-          trailing={
-            <IssueFilterMenu
-              align="start"
-              trigger={
-                <Button variant="ghost" size="sm" className="h-6 gap-1 px-1.5 text-caption text-muted-foreground">
-                  <Plus className="size-3.5" />
-                  <span className="@max-md/issue-header:sr-only">{t(($) => $.views.filter)}</span>
-                </Button>
-              }
-              leadingSections={scopeMenu}
-              scopedIssues={controller.surfaceIssues}
-              facetCountsExact={controller.facetCountsExact}
-              tableFacetCounts={controller.tableFacetCounts}
-              onTableFacetChange={controller.setActiveTableFacet}
-              dateFilter={dateFilter}
-              onDateFilterChange={setDateFilter}
-            />
-          }
         />
 
         {dirty && (
@@ -451,7 +465,7 @@ export function IssueViewHeader({
       </div>
 
       <div className="flex shrink-0 items-center gap-1">
-        {agentRunningFilter && (
+        {agentRunningFilter && crowding === 0 && (
           <span className="mr-1 hidden text-caption text-muted-foreground lg:inline">
             {t(($) => $.agent_activity.filter_active_label)}
           </span>
@@ -460,6 +474,7 @@ export function IssueViewHeader({
           value={agentRunningFilter}
           onToggle={toggleAgentRunningFilter}
           agents={controller.workingAgents}
+          compact={crowding >= 2}
         />
         <IssueDisplayControls
           hideFilter
@@ -468,6 +483,7 @@ export function IssueViewHeader({
           facetCountsExact={controller.facetCountsExact}
           tableFacetCounts={controller.tableFacetCounts}
           onTableFacetChange={controller.setActiveTableFacet}
+          compact={crowding >= 1}
         />
         <Button
           variant="outline"
@@ -477,7 +493,9 @@ export function IssueViewHeader({
           onClick={() => controller.openCreateIssue()}
         >
           <Plus aria-hidden="true" className="size-3.5" />
-          <span className="hidden md:inline @max-3xl/issue-header:hidden">{t(($) => $.views.new_issue)}</span>
+          {crowding < 2 && (
+            <span className="hidden md:inline @max-3xl/issue-header:hidden">{t(($) => $.views.new_issue)}</span>
+          )}
         </Button>
         {trailing}
       </div>
@@ -488,6 +506,48 @@ export function IssueViewHeader({
         onConfirm={actions.remove}
       />
     </PageHeader>
+  );
+}
+
+function ScopeSub<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+  active = false,
+}: {
+  label: string;
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (value: T) => void;
+  /** Narrows the page beyond its default, so it reads like a filter. */
+  active?: boolean;
+}) {
+  const current = options.find((option) => option.value === value)?.label ?? value;
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        <Users className="size-3.5" />
+        <span className="flex-1">{label}</span>
+        <span
+          className={cn(
+            "ml-3 text-caption font-medium",
+            active ? "text-primary" : "text-muted-foreground",
+          )}
+        >
+          {current}
+        </span>
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent className="w-auto min-w-44">
+        <DropdownMenuRadioGroup value={value} onValueChange={(next) => onChange(next as T)}>
+          {options.map((option) => (
+            <DropdownMenuRadioItem key={option.value} value={option.value}>
+              {option.label}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
   );
 }
 

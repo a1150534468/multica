@@ -155,6 +155,7 @@
   },
   "filters": {
     "tooltip": "篩選",
+    "active_section": "已啟用",
     "placeholder": "篩選...",
     "search_status": "搜尋狀態...",
     "no_results": "無結果",
@@ -1671,9 +1672,7 @@
     "toast_deleted": "檢視已刪除",
     "toast_delete_failed": "刪除檢視失敗",
     "filter": "篩選",
-    "more_filters_other": "另外 {{count}} 個篩選",
     "filter_count_other": "{{count}} 個篩選",
-    "clear_all": "全部清除",
     "reset": "重設",
     "save": "儲存",
     "save_options": "更多儲存選項",

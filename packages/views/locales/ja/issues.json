@@ -155,6 +155,7 @@
   },
   "filters": {
     "tooltip": "フィルター",
+    "active_section": "適用中",
     "placeholder": "フィルター...",
     "search_status": "ステータスを検索...",
     "no_results": "結果なし",
@@ -1671,9 +1672,7 @@
     "toast_deleted": "ビューを削除しました",
     "toast_delete_failed": "ビューを削除できませんでした",
     "filter": "フィルター",
-    "more_filters_other": "他 {{count}} 件のフィルター",
     "filter_count_other": "{{count}} 件のフィルター",
-    "clear_all": "すべてクリア",
     "reset": "リセット",
     "save": "保存",
     "save_options": "その他の保存オプション",

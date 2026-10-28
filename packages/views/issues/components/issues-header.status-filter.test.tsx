@@ -74,7 +74,7 @@ const HUMAN_REVIEW = entry({
   position: 1,
 });
 
-function renderFilterMenu(statuses: IssueStatusEntry[]) {
+function renderFilterMenu(statuses: IssueStatusEntry[], initial: Partial<IssueViewState> = {}) {
   setApiInstance({
     listIssueStatuses: async () => ({
       statuses,
@@ -88,6 +88,7 @@ function renderFilterMenu(statuses: IssueStatusEntry[]) {
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
   const store = createStore<IssueViewState>()(viewStoreSlice);
+  store.setState(initial);
 
   return renderWithI18n(
     <QueryClientProvider client={qc}>
@@ -152,5 +153,35 @@ describe("IssueFilterMenu status section", () => {
       document.querySelector("[data-slot='dropdown-menu-label']"),
     ).toBeNull();
     expect(screen.getAllByRole("menuitemcheckbox")).toHaveLength(BUILT_IN_STATUS_ORDER.length);
+  });
+});
+
+describe("IssueFilterMenu active dimensions", () => {
+  const dimensionRows = () =>
+    screen.getAllByRole("menuitem").map((el) => el.textContent?.trim() ?? "");
+
+  it("lists the dimensions already filtering first, with their values", async () => {
+    renderFilterMenu(BUILT_INS, { priorityFilters: ["high"] });
+
+    fireEvent.click(screen.getByRole("button", { name: "Filter" }));
+    await screen.findByText("Active");
+
+    const rows = dimensionRows();
+    expect(rows[0]).toBe("PriorityHigh");
+    expect(rows.slice(1, 3)).toEqual(["Status", "Assignee"]);
+  });
+
+  it("keeps a dimension in place while the menu stays open", async () => {
+    renderFilterMenu(BUILT_INS);
+
+    await openStatusSubmenu();
+    expect(screen.queryByText("Active")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: /In Review/ }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("menuitem", { name: /^Status/ }).textContent).toContain("In Review"),
+    );
+    expect(screen.queryByText("Active")).not.toBeInTheDocument();
+    expect(dimensionRows()[0]).toMatch(/^Status/);
   });
 });
