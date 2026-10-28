@@ -66,6 +66,7 @@ import {
   Archive,
   ArchiveRestore,
   BookCheck,
+  ChevronLeft,
   ListChecks,
   ArrowLeft,
 } from "@multica/ui/icons";
@@ -79,7 +80,6 @@ import {
 } from "@multica/ui/components/ui/tooltip";
 import { Skeleton } from "@multica/ui/components/ui/skeleton";
 import { NumberFlow } from "@multica/ui/components/ui/number-flow";
-import { Tabs, TabsList, TabsTrigger } from "@multica/ui/components/ui/tabs";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -271,6 +271,10 @@ export function InboxPage() {
     setSelectedKeyState("");
     replace(buildInboxUrl(nextView, ""));
   }, [replace, buildInboxUrl]);
+
+  // Stable identity: InboxList memoizes the archive entry on this callback, so
+  // an inline arrow here would rebuild (and remount) the entry every render.
+  const openArchived = useCallback(() => setView("archived"), [setView]);
 
   // Applying a filter can remove the open row from the list. Clear that local
   // selection instead of treating it as a broken deep link and redirecting to
@@ -609,6 +613,17 @@ export function InboxPage() {
       as="h1"
       title={t(($) => $.page.title)}
       leading={<CollapsedNavTrigger />}
+      meta={
+        unreadCount > 0 && (
+          <NumberFlow
+            value={unreadCount}
+            animated={false}
+            format={{ maximumFractionDigits: 0 }}
+            aria-label={String(unreadCount)}
+            className="text-caption text-muted-foreground"
+          />
+        )
+      }
     >
       <InboxFilterMenu
         wsId={wsId}
@@ -657,32 +672,18 @@ export function InboxPage() {
     </PanelHeader>
   );
 
-  // The two lists are siblings, so the switch between them stays pinned under
-  // the header instead of scrolling away with either list.
-  const viewTabs = (
-    <Tabs
-      value={view}
-      onValueChange={(value) => setView(value as InboxView)}
-      className="shrink-0 border-b pl-2 pr-3"
+  // Back out of the archive. Sits inside the list panel rather than replacing
+  // the list header: the user is still in the Inbox, so the page title stays put
+  // and this reads as a sub-view — the same shape chat's archived view uses.
+  const archivedBackRow = (
+    <button
+      type="button"
+      onClick={() => setView("inbox")}
+      className="flex w-full shrink-0 items-center gap-1.5 border-b px-3 py-2 text-left text-caption font-medium text-muted-foreground outline-none transition-colors hover:bg-accent/50 hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring"
     >
-      <TabsList variant="line" aria-label={t(($) => $.page.title)}>
-        <TabsTrigger value="inbox" className="flex-none px-2">
-          {t(($) => $.page.title)}
-          {unreadCount > 0 && (
-            <NumberFlow
-              value={unreadCount}
-              animated={false}
-              format={{ maximumFractionDigits: 0 }}
-              aria-label={String(unreadCount)}
-              className="text-caption tabular-nums text-muted-foreground"
-            />
-          )}
-        </TabsTrigger>
-        <TabsTrigger value="archived" className="flex-none px-2">
-          {t(($) => $.list.archived_title)}
-        </TabsTrigger>
-      </TabsList>
-    </Tabs>
+      <ChevronLeft className="size-4 shrink-0" />
+      <span className="truncate">{t(($) => $.list.archived_title)}</span>
+    </button>
   );
 
   const list = isArchivedView && archivedError ? (
@@ -713,6 +714,7 @@ export function InboxPage() {
         loadMoreError={archiveQuery.isFetchNextPageError}
         onSelect={handleSelect}
         onAction={isArchivedView ? handleUnarchive : handleArchive}
+        onOpenArchived={openArchived}
         emptyLabel={
           hasActiveFilters && visibleItems.length === 0
             ? t(($) => $.filters.empty)
@@ -736,7 +738,7 @@ export function InboxPage() {
   const listPanel = (
     <>
       {listHeader}
-      {viewTabs}
+      {isArchivedView && archivedBackRow}
       {lookupLoading && (
         <p role="status" className="shrink-0 border-b px-3 py-2 text-caption text-muted-foreground">
           {t(($) => $.list.loading_selection)}
@@ -1043,11 +1045,9 @@ export function InboxPage() {
           <div className="flex min-h-0 flex-1 flex-col items-center justify-center text-muted-foreground">
             <Inbox className="mb-3 h-10 w-10 text-faint-foreground" />
             <p className="text-body">
-              {visibleItems.length > 0
-                ? t(($) => $.detail.select_prompt)
-                : isArchivedView
-                  ? t(($) => $.list.archived_empty)
-                  : t(($) => $.detail.empty)}
+              {visibleItems.length === 0
+                ? t(($) => $.detail.empty)
+                : t(($) => $.detail.select_prompt)}
             </p>
           </div>
           </>

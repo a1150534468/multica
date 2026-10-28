@@ -335,10 +335,10 @@ describe("InboxPage", () => {
     );
   });
 
-  it("keeps the inbox tab's unread count static", () => {
+  it("keeps the title unread count static", () => {
     reset();
-    render(<InboxPage />);
-    const titleCount = screen.getAllByRole("tab")[0]?.querySelector(
+    const { container } = render(<InboxPage />);
+    const titleCount = container.querySelector("h1")?.parentElement?.querySelector(
       "number-flow-react",
     ) as (HTMLElement & { animated?: boolean }) | null;
 
@@ -562,23 +562,6 @@ describe("InboxPage", () => {
 
     expect(screen.getByTestId("list").dataset.view).toBe("archived");
     expect(screen.getByTestId("row").textContent).toBe("archived-1");
-  });
-
-  it("switches between the inbox and the archive from the header tabs", () => {
-    reset();
-    layout.width = DESKTOP;
-    searchParams = new URLSearchParams("issue=issue-1");
-    listData.active = [item({ id: "active-1", issue_id: "issue-1" })];
-    render(<InboxPage />);
-
-    // The test's `useT` labels every tab "Inbox", so they are located by order.
-    const [inboxTab, archivedTab] = screen.getAllByRole("tab");
-    expect(inboxTab).toHaveAttribute("aria-selected", "true");
-    fireEvent.click(archivedTab!);
-
-    expect(replace).toHaveBeenLastCalledWith("/acme/inbox?view=archived");
-    expect(archivedTab).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByTestId("list").dataset.view).toBe("archived");
   });
 
   it("hides the batch-actions menu in the archived view", () => {

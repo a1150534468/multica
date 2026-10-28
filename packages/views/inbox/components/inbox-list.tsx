@@ -3,13 +3,14 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent,
   type ReactNode,
 } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
-import { Inbox } from "@multica/ui/icons";
+import { Archive, ChevronRight, Inbox } from "@multica/ui/icons";
 import { isEditableShortcutTarget } from "@multica/core/shortcuts";
 import { isImeComposing } from "@multica/core/utils";
 import type { InboxItem } from "@multica/core/types";
@@ -55,6 +56,7 @@ export function InboxList({
   loadMoreError = false,
   onSelect,
   onAction,
+  onOpenArchived,
   emptyLabel,
   emptyAction,
   scrollRestoration = true,
@@ -67,6 +69,7 @@ export function InboxList({
   loadMoreError?: boolean;
   onSelect: (item: InboxItem) => void;
   onAction: (id: string) => void;
+  onOpenArchived: () => void;
   emptyLabel?: string;
   emptyAction?: ReactNode;
   /**
@@ -158,15 +161,39 @@ export function InboxList({
     onSelect(nextItem);
   };
 
+  // The entry into the archive sits below the last row and scrolls with the
+  // list (same placement as chat's). Virtuoso mounts it via `components.Footer`,
+  // and swaps the component whenever that prop's identity changes — so both the
+  // element and the Footer wrapping it are memoized. Without that the entry
+  // remounts on every parent render and drops hover/focus mid-click.
+  const archivedEntry = useMemo(
+    () =>
+      !isArchivedView ? (
+        <button
+          type="button"
+          onClick={onOpenArchived}
+          className="mt-1 flex h-10 w-full items-center gap-2 rounded-md px-2 text-left text-caption text-muted-foreground outline-none transition-colors hover:bg-accent/50 hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring"
+        >
+          <span className="flex size-7 shrink-0 items-center justify-center">
+            <Archive className="size-4" />
+          </span>
+          <span className="min-w-0 flex-1 truncate font-medium">
+            {t(($) => $.list.archived_title)}
+          </span>
+          <ChevronRight className="size-4 shrink-0 text-faint-foreground" />
+        </button>
+      ) : null,
+    [isArchivedView, onOpenArchived, t],
+  );
+
   const loadMore = useCallback(() => {
     if (!loadingMore && !loadMoreError) onLoadMore?.();
   }, [loadingMore, loadMoreError, onLoadMore]);
   useEffect(() => {
     if (items.length === 0) loadMore();
   }, [items.length, loadMore]);
-  // Virtuoso remounts `components.Footer` whenever its identity changes, so
-  // it is memoized to keep the load-more button's focus across renders.
   const Footer = useCallback(() => <>
+    {archivedEntry}
     {isArchivedView && onLoadMore && (
       <div className="flex flex-col items-center gap-2 py-3">
         {loadMoreError && <p role="alert" className="text-caption text-destructive">{t(($) => $.errors.archived_load_failed)}</p>}
@@ -176,7 +203,7 @@ export function InboxList({
         </button>
       </div>
     )}
-  </>, [isArchivedView, onLoadMore, loadingMore, loadMoreError, t]);
+  </>, [archivedEntry, isArchivedView, onLoadMore, loadingMore, loadMoreError, t]);
 
   if (items.length === 0) {
     return (
@@ -191,6 +218,8 @@ export function InboxList({
           </p>
           {emptyAction && <div className="mt-3">{emptyAction}</div>}
         </div>}
+        {/* Still offer the archive when the main list is empty — that is
+            exactly when a user goes looking for what they filed away. */}
         <div className="px-2"><Footer /></div>
       </div>
     );
@@ -237,12 +266,18 @@ export function InboxList({
             components={{ Footer }}
           />
         ) : (
-          <VirtuosoSeed
-            data={items}
-            itemContent={itemContent}
-            computeItemKey={computeItemKey}
-            estimatedItemHeight={INBOX_ROW_ESTIMATED_HEIGHT}
-          />
+          <>
+            <VirtuosoSeed
+              data={items}
+              itemContent={itemContent}
+              computeItemKey={computeItemKey}
+              estimatedItemHeight={INBOX_ROW_ESTIMATED_HEIGHT}
+            />
+            {/* The seed frame renders a bounded slice, so the entry would be
+                mid-list rather than after the last row — only show it once the
+                seed IS the whole list. */}
+            {items.length <= VIRTUOSO_SEED_COUNT && archivedEntry}
+          </>
         )}
       </div>
     </div>
