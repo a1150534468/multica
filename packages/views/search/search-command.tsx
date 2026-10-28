@@ -15,7 +15,6 @@ import {
 import { ShortcutKeycaps } from "../common/shortcut-keycaps";
 import { resolveClickIntent, useIntentNavigate, type LinkClickIntent } from "../navigation";
 import { useT } from "../i18n";
-import { stripEllipsis } from "./matching";
 import { PaletteContext, type PaletteApi } from "./palette-context";
 import { PaletteFooter } from "./footer";
 import { PaletteHostDialogs } from "./host-dialogs";
@@ -24,17 +23,9 @@ import { RootView } from "./root-view";
 import { useDelegateSubmit } from "./delegate/use-delegate";
 import { useRootModel } from "./use-root-model";
 import { useSearchStore } from "./search-store";
-import type { DelegateActor, PaletteHostDialog, PalettePage, PaletteStackEntry } from "./types";
+import type { DelegateActor, PaletteHostDialog, PaletteStackEntry } from "./types";
 
 const ESCAPE = createShortcutChord("Escape");
-
-// S / A / P on an empty root input jump straight into the matching submenu of
-// the issue (or selection) on screen. They only exist inside the palette.
-const ISSUE_PAGE_KEYS: Record<string, "issue-status" | "issue-assignee" | "issue-priority"> = {
-  s: "issue-status",
-  a: "issue-assignee",
-  p: "issue-priority",
-};
 
 /**
  * ⌘K. The shell owns the dialog, the input, the page stack and the footer;
@@ -141,7 +132,6 @@ function PaletteBody({
         setStack={setStack}
         pageQuery={pageQuery}
         setPageQuery={setPageQuery}
-        push={push}
         recordIntent={recordIntent}
       />
     </PaletteContext.Provider>
@@ -154,14 +144,12 @@ function PaletteFrame({
   setStack,
   pageQuery,
   setPageQuery,
-  push,
   recordIntent,
 }: {
   stack: PaletteStackEntry[];
   setStack: React.Dispatch<React.SetStateAction<PaletteStackEntry[]>>;
   pageQuery: string;
   setPageQuery: (value: string) => void;
-  push: (entry: PaletteStackEntry) => void;
   recordIntent: (e: Pick<MouseEvent, "button" | "metaKey" | "ctrlKey" | "shiftKey">) => void;
 }) {
   const { t } = useT("search");
@@ -179,36 +167,6 @@ function PaletteFrame({
     [model.attachments, submitDelegate],
   );
 
-  // A page opened by S / A / P whose filter matches nothing was the start of
-  // a search ("settings", "project"): hand the whole text back to the root.
-  const listRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!current?.openedByKey || !pageQuery) return;
-    if (listRef.current?.querySelector("[cmdk-item]")) return;
-    const text = current.openedByKey + pageQuery;
-    setStack((prev) => prev.slice(0, -1));
-    setPageQuery("");
-    setRawQuery(text);
-  }, [current, pageQuery, setPageQuery, setStack]);
-
-  const openIssuePage = (type: (typeof ISSUE_PAGE_KEYS)[string], key: string) => {
-    const target = model.primaryIssueTarget;
-    if (!target) return false;
-    const subject =
-      target.kind === "single"
-        ? target.issue.identifier
-        : t(($) => $.context.selected_issues, { count: target.issues.length });
-    const label =
-      type === "issue-status"
-        ? t(($) => $.issue.change_status)
-        : type === "issue-assignee"
-          ? t(($) => $.issue.assign_to)
-          : t(($) => $.issue.set_priority);
-    const page = { type, target } as PalettePage;
-    push({ page, crumbs: [subject, stripEllipsis(label)], openedByKey: key });
-    return true;
-  };
-
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     // cmdk's root handler intercepts Home/End for list navigation; stop
     // propagation so the browser moves the text caret instead.
@@ -219,13 +177,6 @@ function PaletteFrame({
     if (e.key === "Backspace" && current && pageQuery === "") {
       e.preventDefault();
       setStack((prev) => prev.slice(0, -1));
-      return;
-    }
-    if (e.nativeEvent.isComposing) return;
-    const plain = !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey;
-    const pageType = ISSUE_PAGE_KEYS[e.key.toLowerCase()];
-    if (!current && rawQuery === "" && plain && pageType && openIssuePage(pageType, e.key)) {
-      e.preventDefault();
       return;
     }
     // ⇧↵ treats an input that read as an instruction as a plain search.
@@ -293,7 +244,7 @@ function PaletteFrame({
           <ShortcutKeycaps shortcut={ESCAPE} className="hidden shrink-0 sm:inline-flex" />
         </div>
 
-        <CommandPrimitive.List ref={listRef} className="max-h-[min(440px,55vh)] overflow-y-auto overflow-x-hidden py-1">
+        <CommandPrimitive.List className="max-h-[min(440px,55vh)] overflow-y-auto overflow-x-hidden py-1">
           {current ? (
             <PageView page={current.page} query={pageQuery} onDelegate={onDelegate} />
           ) : (

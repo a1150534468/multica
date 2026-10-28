@@ -750,37 +750,56 @@ describe("SearchCommand", () => {
       expect(input().value).toBe("");
     });
 
-    it.each([
-      ["s", "Change status", "status:"],
-      ["a", "Assign to", "assignee:"],
-      ["p", "Set priority", "priority:"],
-    ])("'%s' on an empty input opens the %s submenu", async (key, crumb, prefix) => {
+    it("opens a submenu from its row, with the issue in the breadcrumb", async () => {
       const user = userEvent.setup();
       renderSearch();
-      await user.click(input());
-      await user.keyboard(key);
+      await user.click(await rowText("Change status..."));
 
-      const nav = screen.getByRole("navigation", { name: "Current menu" });
-      expect(nav).toHaveTextContent(`MUL-42${crumb}`);
+      expect(screen.getByRole("navigation", { name: "Current menu" })).toHaveTextContent("MUL-42Change status");
       expect(renderedValues().length).toBeGreaterThan(0);
-      expect(renderedValues().every((v) => v.startsWith(prefix))).toBe(true);
+      expect(renderedValues().every((v) => v.startsWith("status:"))).toBe(true);
     });
 
-    it("hands a search that only starts with S back to the root input", async () => {
+    it("ranks the issue's command first when its name is typed", async () => {
       const user = userEvent.setup();
       renderSearch();
-      await user.type(input(), "settings");
+      await user.type(input(), "status");
 
-      await waitFor(() => expect(input().value).toBe("settings"));
+      await waitFor(() => expect(renderedValues()[0]).toBe("command:issue-status"));
+      fireEvent.keyDown(input(), { key: "Enter" });
+      expect(screen.getByRole("navigation", { name: "Current menu" })).toHaveTextContent("MUL-42Change status");
+    });
+
+    it.each(["s", "a", "p"])("types '%s' into the search instead of opening a submenu", async (key) => {
+      const user = userEvent.setup();
+      renderSearch();
+      await user.type(input(), key);
+
+      expect(input().value).toBe(key);
       expect(screen.queryByRole("navigation", { name: "Current menu" })).not.toBeInTheDocument();
-      expect(await rowText("Settings")).toBeInTheDocument();
+    });
+
+    it("searches a person whose name starts with A instead of assigning", async () => {
+      const user = userEvent.setup();
+      seed(memberListOptions("ws-test"), [
+        makeMember(ME, "Me Myself", "me@example.com"),
+        makeMember("user-1", "Alice Zhang", "alice@example.com"),
+      ]);
+      renderSearch();
+      await user.type(input(), "alice");
+
+      await waitFor(() => expect(renderedValues()[0]).toBe("best:member:user-1"));
+      fireEvent.keyDown(input(), { key: "Enter" });
+
+      expect(mockPush).toHaveBeenCalledWith("/ws-test/members/user-1");
+      expect(api("updateIssue")).not.toHaveBeenCalled();
+      expect(mockOpenModal).not.toHaveBeenCalled();
     });
 
     it("writes a priority picked in the submenu to the issue", async () => {
       const user = userEvent.setup();
       renderSearch();
-      await user.click(input());
-      await user.keyboard("p");
+      await user.click(await rowText("Set priority..."));
       await user.click(screen.getByText("High"));
 
       await waitFor(() => expect(api("updateIssue")).toHaveBeenCalledWith("issue-1", { priority: "high" }));
@@ -879,8 +898,7 @@ describe("SearchCommand", () => {
       renderSearch();
 
       expect(renderedHeadings()[0]).toBe("3 selected issues");
-      await user.click(input());
-      await user.keyboard("p");
+      await user.click(await rowText("Set priority..."));
       expect(screen.getByRole("navigation", { name: "Current menu" })).toHaveTextContent(
         "3 selected issuesSet priority",
       );
@@ -896,8 +914,7 @@ describe("SearchCommand", () => {
       const user = userEvent.setup();
       seed(agentListOptions("ws-test"), [makeAgent("agent-lambda", "Lambda")]);
       renderSearch();
-      await user.click(input());
-      await user.keyboard("a");
+      await user.click(await rowText("Assign to..."));
       await user.click(await screen.findByText((_, el) => el?.textContent === "Lambda" && el?.tagName === "SPAN"));
 
       expect(mockOpenModal).toHaveBeenCalledWith("issue-run-confirm", {

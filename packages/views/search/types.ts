@@ -31,12 +31,6 @@ export interface PaletteStackEntry {
   page: PalettePage;
   /** Breadcrumb segments shown above the input, e.g. ["MUL-12", "Assign to"]. */
   crumbs: string[];
-  /**
-   * The letter that opened this page from an empty root input (S / A / P).
-   * When what follows matches nothing on the page, the keystrokes were a
-   * search after all and go back to the root input.
-   */
-  openedByKey?: string;
 }
 
 export type PaletteIcon = ComponentType<{ className?: string }>;

@@ -85,7 +85,7 @@ export interface RootModel {
   recent: RecentItem[];
   newCommands: PaletteCommand[];
   delegate: DelegateModel | null;
-  /** The issue or selection S / A / P act on from the empty root. */
+  /** The issue or selection that best-match actions such as "Assign … to" act on. */
   primaryIssueTarget: IssueTarget | null;
   /** Context a delegated issue is created with. */
   attachments: DelegateAttachments;

@@ -36,7 +36,6 @@ import {
 import { useRetryIssueRun, useToggleIssueSubscriber } from "@multica/core/issues/mutations";
 import { useCommentCollapseStore, useResolvedExpandStore } from "@multica/core/issues/stores";
 import { quickActionListOptions } from "@multica/core/quick-actions";
-import { createShortcutChord } from "@multica/core/shortcuts";
 import type { AgentTask, Issue } from "@multica/core/types";
 import { copyText } from "@multica/ui/lib/clipboard";
 import { useIssueActions } from "../../issues/actions/use-issue-actions";
@@ -54,10 +53,6 @@ const ACTIVE_TASK_STATUSES = new Set<AgentTask["status"]>([
   "deferred",
   "running",
 ]);
-
-const KEY_S = createShortcutChord("S");
-const KEY_A = createShortcutChord("A");
-const KEY_P = createShortcutChord("P");
 
 /** Commands for the issue on screen (`issue`) or a list selection (`issues`). */
 export function useIssueCommandGroup(
@@ -104,7 +99,6 @@ export function useIssueCommandGroup(
         label: t(($) => $.issue.change_status),
         icon: CircleDashed,
         keywords: ["status", "state", "状态"],
-        shortcut: KEY_S,
         page: { type: "issue-status", target },
         crumb,
         primary: true,
@@ -114,7 +108,6 @@ export function useIssueCommandGroup(
         label: t(($) => $.issue.assign_to),
         icon: UserPlus,
         keywords: ["assign", "assignee", "owner", "agent", "指派", "负责人"],
-        shortcut: KEY_A,
         page: { type: "issue-assignee", target },
         crumb,
         primary: true,
@@ -124,7 +117,6 @@ export function useIssueCommandGroup(
         label: t(($) => $.issue.set_priority),
         icon: SignalHigh,
         keywords: ["priority", "urgent", "优先级"],
-        shortcut: KEY_P,
         page: { type: "issue-priority", target },
         crumb,
         primary: true,
