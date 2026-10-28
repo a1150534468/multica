@@ -57,11 +57,20 @@ export function FoldingFilterChips({
   });
   const hidden = chips.slice(fitCount);
   // Only chips fold; the scope chip, "+N" and the add-filter trigger keep the
-  // row from shrinking past them.
+  // row from shrinking past them. They change width on their own too (the
+  // add-filter label hides in a narrow header), so watch them as well.
   const [minWidth, setMinWidth] = useState(0);
   useLayoutEffect(() => {
-    const next = reserve(fitCount) - CHIP_GAP;
-    setMinWidth((current) => (current === next ? current : next));
+    const update = () => {
+      const next = reserve(fitCount) - CHIP_GAP;
+      setMinWidth((current) => (current === next ? current : next));
+    };
+    update();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(update);
+    if (trailingRef.current) observer.observe(trailingRef.current);
+    if (leadingRef.current) observer.observe(leadingRef.current);
+    return () => observer.disconnect();
   }, [reserve, fitCount, leading]);
 
   return (

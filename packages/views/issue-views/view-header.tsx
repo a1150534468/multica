@@ -315,7 +315,7 @@ export function IssueViewHeader({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-7 min-w-0 max-w-64 gap-2 px-2 text-body font-medium text-foreground"
+                    className="h-7 min-w-0 max-w-64 shrink gap-2 px-2 text-body font-medium text-foreground"
                   />
                 }
               >
@@ -415,7 +415,7 @@ export function IssueViewHeader({
               trigger={
                 <Button variant="ghost" size="sm" className="h-6 gap-1 px-1.5 text-caption text-muted-foreground">
                   <Plus className="size-3.5" />
-                  {t(($) => $.views.filter)}
+                  <span className="@max-md/issue-header:sr-only">{t(($) => $.views.filter)}</span>
                 </Button>
               }
               leadingSections={scopeMenu}
