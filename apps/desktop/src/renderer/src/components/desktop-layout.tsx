@@ -262,7 +262,7 @@ export function DesktopShell() {
           {/* hasExternalTrigger: WindowToolbar below parks a SidebarTrigger
               beside the traffic lights, where it is always reachable. Page
               headers inside the canvas must not add their own fallback one on
-              top of it — desktop windows sit below `xl`, exactly where that
+              top of it — desktop windows often sit in the band where that
               fallback renders, so every page showed a second identical icon
               50px under this one (MUL-6218). */}
           <SidebarProvider

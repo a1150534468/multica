@@ -24,7 +24,7 @@ interface AppShellContextValue {
   hasPanel: boolean;
   /**
    * Inbox, Chat and Settings keep their own list column, which collapses with
-   * the space panel. Tracked apart from the panel's open state so the md–xl
+   * the space panel. Tracked apart from the panel's open state so the md–lg
    * auto-collapse never hides a list the page needs.
    */
   listCollapsed: boolean;

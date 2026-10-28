@@ -154,7 +154,7 @@ describe("AppShellProvider", () => {
     expect(sidebarState).toBe("expanded");
   });
 
-  it("collapses a list column the md–xl auto-collapse left open", () => {
+  it("collapses a list column the md–lg auto-collapse left open", () => {
     navigation.pathname = "/acme/inbox";
     renderNavShell();
     act(() => setSidebarOpen!(false));

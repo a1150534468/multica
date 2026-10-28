@@ -126,7 +126,7 @@ describe("SettingsPage nav trigger", () => {
   });
 
   it("hides the trigger only where the nav is a permanent column", () => {
-    // The nav is in-flow from `xl` up, so the control is CSS-gated rather than
+    // The nav is in-flow from `lg` up, so the control is CSS-gated rather than
     // unmounted — jsdom applies no stylesheet, hence the class assertion.
     renderWithI18n(
       <SidebarProvider>
@@ -134,7 +134,7 @@ describe("SettingsPage nav trigger", () => {
       </SidebarProvider>,
     );
 
-    expect(trigger().className).toContain("xl:hidden");
+    expect(trigger().className).toContain("lg:hidden");
   });
 
   it("still renders standalone, without a sidebar around it", () => {

@@ -77,7 +77,7 @@ export function CollapsedNavTrigger() {
       ? sidebar.state === "collapsed"
       : shell.listCollapsed
     : false;
-  const className = shell ? (collapsed ? undefined : "md:hidden") : "xl:hidden";
+  const className = shell ? (collapsed ? undefined : "md:hidden") : "lg:hidden";
   return (
     <SidebarTrigger
       className={className}
@@ -115,8 +115,8 @@ interface PageHeaderProps {
  *
  * The leading slot below is a flex item too, so a header that reads as two
  * zones in source is three at runtime, and `justify-between` splits the free
- * space on BOTH sides of the title — parking it mid-header. Desktop windows
- * sit below `xl`, where the trigger renders, so that is where it surfaces.
+ * space on BOTH sides of the title — parking it mid-header. Narrow windows
+ * sit below `lg`, where the trigger renders, so that is where it surfaces.
  *
  * `gap-2` is the base for the same reason: it makes the header's own gap the
  * single source of the leading-slot spacing. When the trigger carried its own
