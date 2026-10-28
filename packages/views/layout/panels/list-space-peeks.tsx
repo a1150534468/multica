@@ -24,7 +24,6 @@ import { agentListOptions } from "@multica/core/workspace/queries";
 import { ChatThreadList } from "../../chat/components/chat-thread-list";
 import { useT } from "../../i18n";
 import { InboxList } from "../../inbox/components/inbox-list";
-import { ARCHIVED_VIEW_PARAM } from "../../inbox/components/inbox-view";
 import { useIssueSurfaceActivity } from "../../issues/surface/activity";
 import { useNavigation } from "../../navigation";
 import { PanelCount, PanelHeader } from "../panel-nav";
@@ -71,7 +70,6 @@ export function InboxPeek() {
         scrollRestoration={false}
         onSelect={(item) => open({ issue: item.issue_id ?? item.id })}
         onAction={(id) => archive.mutate(id)}
-        onOpenArchived={() => open({ view: ARCHIVED_VIEW_PARAM })}
       />
     </>
   );
