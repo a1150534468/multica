@@ -20,7 +20,7 @@ Every icon in the product is a Multica drawing exported from `@multica/ui/icons`
 
 ## Construction
 
-- **Grid.** 24×24 viewBox, with a 2px round-capped, round-joined stroke from the renderer. Keep geometry inside 2.5–21.5. Most silhouettes span 2.75–21.25. An object glyph whose longest side is under about 17 renders visibly smaller than its neighbours; only chevrons, `X` and similar marks stay small. Keep parallel strokes at least 3 apart so a gap survives at 14px.
+- **Grid.** 24×24 viewBox, with a 2px round-capped, round-joined stroke from the renderer. Keep geometry inside 2.5–21.5. Most silhouettes span 2.75–21.25. An object glyph whose longest side is under about 17 renders visibly smaller than its neighbours; only chevrons, `X` and similar marks stay small. Keep parallel strokes at least 3 apart so a gap survives at 14px. A stroke that crosses a shape, such as a pencil's cap line, ends exactly on the outline's centreline; the round cap pokes out if it runs past. When you scale or move a body, recompute these endpoints.
 - **Corners.** Use `shape([[x, y, k], ...])` and `rect(x, y, w, h, k)`, which build continuous-curvature (squircle) corners. Typical `k` values:
   - 5–7 for large containers such as cards, windows and chat bubbles.
   - 2.5–4 for small parts.

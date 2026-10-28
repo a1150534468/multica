@@ -65,7 +65,7 @@ export const DRAWINGS = {
   ChevronRight: `<path d="M9 6L15 12 9 18"/>`,
   ChevronDown: `<path d="M18 9L12 15 6 9"/>`,
   MoreHorizontal: `<circle ${S} cx="5" cy="12" r="1.6"/><circle ${S} cx="12" cy="12" r="1.6"/><circle ${S} cx="19" cy="12" r="1.6"/>`,
-  Pencil: `<path class="b" d="M16 3.65a3 3 0 0 1 4.25 4.25L8.6 19.5 3 20.9l1.4-5.6Z"/><path d="m14.2 5.45 5 5"/>`,
+  Pencil: `<path class="b" d="M16 3.65a3 3 0 0 1 4.25 4.25L8.6 19.5 3 20.9l1.4-5.6Z"/><path d="m14.2 5.45 4.25 4.25"/>`,
   Trash2: `<path d="M3.5 6h17M9 6V4.75c0-.7.55-1.25 1.25-1.25h3.5c.7 0 1.25.55 1.25 1.25V6"/>
     <path class="b" d="m5.5 6 .9 12.3a2.5 2.5 0 0 0 2.5 2.2h6.2a2.5 2.5 0 0 0 2.5-2.2L18.5 6"/>
     <path d="M10 11v5M14 11v5"/>`,
