@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, MessageSquare } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, MessageSquare } from "@multica/ui/icons";
 import { toast } from "sonner";
 import { Button } from "@multica/ui/components/ui/button";
 import { useIsCompact } from "@multica/ui/hooks/use-mobile";
@@ -33,6 +33,7 @@ import { NoAgentBanner } from "./components/no-agent-banner";
 import { ArchivedAgentBanner } from "./components/archived-agent-banner";
 import { AgentAccessRevokedBanner } from "./components/agent-access-revoked-banner";
 import { RuntimeRequiredBanner } from "./components/runtime-required-banner";
+import { useRegisterCommandBarContext } from "../search/register-context";
 
 /**
  * Chat tab — the first-class two-pane surface (thread list on the left,
@@ -181,6 +182,29 @@ export function ChatPage() {
     // cleared.
     if (!c.currentSession || projectId !== null) setComposingNew(true);
   };
+
+  // The command bar calls the page's own handlers so archiving or re-scoping
+  // from it moves the pane exactly like the header controls do.
+  const commandBarHandlersRef = useRef({ handleArchive, changeProjectContext });
+  useEffect(() => {
+    commandBarHandlersRef.current = { handleArchive, changeProjectContext };
+  });
+  const commandBarSession = c.currentSession ?? null;
+  useRegisterCommandBarContext(
+    useMemo(
+      () =>
+        commandBarSession
+          ? {
+              kind: "chat",
+              session: commandBarSession,
+              archive: (session: ChatSession) => commandBarHandlersRef.current.handleArchive(session),
+              changeProject: (projectId: string | null) =>
+                commandBarHandlersRef.current.changeProjectContext(projectId),
+            }
+          : null,
+      [commandBarSession],
+    ),
+  );
 
   // URL → new chat: `?agent=<id>` is the deep link used by "DM" entry points
   // (e.g. the agent detail page) to land on a fresh compose bound to that

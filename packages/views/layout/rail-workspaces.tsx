@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Plus } from "lucide-react";
+import { Check, Plus } from "@multica/ui/icons";
 import { api } from "@multica/core/api";
 import { useConfigStore } from "@multica/core/config";
 import {

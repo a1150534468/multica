@@ -6,14 +6,14 @@ import {
   Download,
   History,
   Keyboard,
-  Languages,
+  Globe,
   LogOut,
   Monitor,
   Moon,
   Palette,
   Sun,
   User,
-} from "lucide-react";
+} from "@multica/ui/icons";
 import { useAuthStore } from "@multica/core/auth";
 import { useWorkspacePaths } from "@multica/core/paths";
 import type { SupportedLocale } from "@multica/core/i18n";
@@ -136,7 +136,7 @@ export function AccountMenu() {
           </DropdownMenuSub>
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
-              <Languages />
+              <Globe />
               <SubmenuLabel
                 label={t(($) => $.account.language)}
                 value={language.options.find((o) => o.value === language.currentLocale)?.label}

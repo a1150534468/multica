@@ -2,7 +2,7 @@
 
 import { forwardRef, memo, useCallback, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronUp } from "@multica/ui/icons";
 import { cn } from "@multica/ui/lib/utils";
 import { ShimmerText } from "@multica/ui/components/common/shimmer-text";
 import { agentTaskSnapshotOptions } from "@multica/core/agents";

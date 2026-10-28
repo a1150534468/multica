@@ -3,7 +3,7 @@
 import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useStore } from "zustand";
-import { Bot, CircleUser, ListTodo, SquarePen } from "lucide-react";
+import { Bot, CircleUser, ListTodo, SquarePen } from "@multica/ui/icons";
 import { IconButton } from "@multica/ui/components/common/icon-button";
 import { useAuthStore } from "@multica/core/auth";
 import { useCurrentWorkspace, useWorkspacePaths } from "@multica/core/paths";

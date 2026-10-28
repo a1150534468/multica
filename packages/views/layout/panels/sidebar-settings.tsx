@@ -1,6 +1,6 @@
 "use client";
 
-import { SlidersHorizontal } from "lucide-react";
+import { SlidersHorizontal } from "@multica/ui/icons";
 import { cn } from "@multica/ui/lib/utils";
 import { Button } from "@multica/ui/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@multica/ui/components/ui/popover";

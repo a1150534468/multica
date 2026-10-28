@@ -6,7 +6,7 @@ import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type D
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { restrictToFirstScrollableAncestor, restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { CSS } from "@dnd-kit/utilities";
-import { Layers, Plus } from "lucide-react";
+import { Layers, Plus } from "@multica/ui/icons";
 import { cn } from "@multica/ui/lib/utils";
 import { IconButton } from "@multica/ui/components/common/icon-button";
 import { useIssueStatuses } from "@multica/core/issue-statuses/hooks";

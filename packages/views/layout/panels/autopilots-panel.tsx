@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Code, Clock, Plus, Webhook, Zap } from "lucide-react";
+import { Code, Clock, Plus, Webhook, Zap } from "@multica/ui/icons";
 import { IconButton } from "@multica/ui/components/common/icon-button";
 import { autopilotListOptions } from "@multica/core/autopilots/queries";
 import { useCurrentWorkspace, useWorkspacePaths } from "@multica/core/paths";

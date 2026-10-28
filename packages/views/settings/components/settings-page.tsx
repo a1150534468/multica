@@ -23,7 +23,7 @@ import {
   X,
   Workflow,
   Zap,
-} from "lucide-react";
+} from "@multica/ui/icons";
 import { useCurrentWorkspace } from "@multica/core/paths";
 import { useFeatureEnabled } from "@multica/core/config";
 import { useCurrentMember } from "@multica/core/permissions";

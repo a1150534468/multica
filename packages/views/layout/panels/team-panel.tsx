@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { BarChart3, BookOpenText, Bot, Monitor, Plus, User, UserPlus, Users } from "lucide-react";
+import { BarChart3, BookOpenText, Bot, Monitor, Plus, User, UserPlus, Users } from "@multica/ui/icons";
 import { cn } from "@multica/ui/lib/utils";
 import { ActorAvatar } from "@multica/ui/components/common/actor-avatar";
 import { IconButton } from "@multica/ui/components/common/icon-button";

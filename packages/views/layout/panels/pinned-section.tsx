@@ -12,7 +12,7 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Layers, X } from "lucide-react";
+import { Layers, X } from "@multica/ui/icons";
 import { cn } from "@multica/ui/lib/utils";
 import { TooltipHint } from "@multica/ui/components/common/tooltip-hint";
 import { ApiError } from "@multica/core/api";

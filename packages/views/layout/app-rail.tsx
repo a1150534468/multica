@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Search, Settings, Users, type LucideIcon } from "lucide-react";
+import { Search, Settings, Users, type IconComponent } from "@multica/ui/icons";
 import { useChatStore } from "@multica/core/chat";
 import { chatSessionsOptions } from "@multica/core/chat/queries";
 import { countUnreadChatMessages } from "@multica/core/chat/unread";
@@ -134,7 +134,7 @@ function RailSpaceLink({
 }: {
   space: RailSpaceId;
   href: string;
-  icon: LucideIcon;
+  icon: IconComponent;
   label: string;
   fullLabel: string;
   active: boolean;
@@ -195,7 +195,7 @@ export function AppRail({ topSlot, className }: { topSlot?: React.ReactNode; cla
   const space = shell?.space ?? null;
   const settingsPeek = usePeekHandlers("settings", space === "settings");
 
-  const items: Record<RailSpaceId, { href: string; icon: LucideIcon; label: string; fullLabel: string }> = {
+  const items: Record<RailSpaceId, { href: string; icon: IconComponent; label: string; fullLabel: string }> = {
     inbox: {
       href: p.inbox(),
       icon: routeIconForPath(p.inbox()),

@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { Plus } from "@multica/ui/icons";
 import { openCreateIssueWithPreference } from "@multica/core/issues/stores/create-mode-store";
 import { CollectionPageHeaderAction } from "../../layout/collection-page";
 import { useT } from "../../i18n";
