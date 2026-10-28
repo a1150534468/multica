@@ -69,8 +69,10 @@ interface ExecutionLogSectionProps {
   issueTitle?: string;
 }
 
-// How many past runs the sidebar lists before deferring to the Runs dialog.
-const LATEST_PAST_RUNS = 3;
+// The sidebar lists this many rows; everything else is in the Runs dialog.
+// Active runs come first and are never cut (they carry the stop action);
+// past runs fill whatever is left.
+const LIST_ROWS = 3;
 // Queued runs at or past this count fold into one expandable row: they have
 // nothing to show yet but their trigger, so a row each mostly costs height.
 const MIN_QUEUED_GROUP = 2;
@@ -142,7 +144,9 @@ export function ExecutionLogSection({ issueId, identifier, issueTitle }: Executi
 
   const queuedTasks = activeTasks.filter((task) => task.status === "queued");
   const startedTasks = activeTasks.filter((task) => task.status !== "queued");
-  const latest = pastTasks.slice(0, LATEST_PAST_RUNS);
+  const groupQueued = queuedTasks.length >= MIN_QUEUED_GROUP;
+  const activeRows = startedTasks.length + (groupQueued ? 1 : queuedTasks.length);
+  const latest = pastTasks.slice(0, Math.max(0, LIST_ROWS - activeRows));
   const hiddenCount = pastTasks.length - latest.length;
   const openRuns = () => setRunsOpen(true);
 
@@ -173,7 +177,7 @@ export function ExecutionLogSection({ issueId, identifier, issueTitle }: Executi
           {activeTasks.length > 0 && (
             <div className="max-h-48 space-y-0.5 overflow-y-auto overscroll-contain rounded-md focus-visible:outline-2 focus-visible:outline-ring" role="region" aria-label={t(($) => $.runs_timeline.count_active, { count: activeTasks.length })} tabIndex={0}>
               {startedTasks.map((task) => <ActiveTaskRow key={task.id} task={task} issueId={issueId} />)}
-              {queuedTasks.length >= MIN_QUEUED_GROUP ? (
+              {groupQueued ? (
                 <QueuedTasksGroup tasks={queuedTasks} issueId={issueId} />
               ) : (
                 queuedTasks.map((task) => <ActiveTaskRow key={task.id} task={task} issueId={issueId} />)

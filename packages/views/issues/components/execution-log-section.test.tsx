@@ -442,6 +442,28 @@ describe("execution log past runs", () => {
     expect(screen.getByText("MUL-1 · Wakeups")).toBeInTheDocument();
   });
 
+  it("lets active runs take the three rows first and fills the rest with past runs", () => {
+    const active = [
+      makeTask({ id: "running", status: "running", trigger_summary: "Live run" }),
+      makeTask({ id: "q1", status: "queued", trigger_summary: "Queued one" }),
+      makeTask({ id: "q2", status: "queued", trigger_summary: "Queued two" }),
+    ];
+    const { unmount } = renderSection([...active, past(1), past(2), past(3), past(4)]);
+    // One running row + one folded queued row leave a single past slot.
+    expect(screen.getAllByText(/^Past run \d$/).map((el) => el.textContent)).toEqual(["Past run 4"]);
+    expect(screen.getByRole("button", { name: "Open timeline · Show 3 more" })).toBeInTheDocument();
+    unmount();
+
+    renderSection([
+      ...active,
+      makeTask({ id: "running-2", status: "running", trigger_summary: "Second live run" }),
+      makeTask({ id: "running-3", status: "running", trigger_summary: "Third live run" }),
+      past(1),
+    ]);
+    expect(screen.queryByText("Past run 1")).not.toBeInTheDocument();
+    expect(screen.getByText("Third live run")).toBeInTheDocument();
+  });
+
   it("keeps a finished run to one line, with agent, duration and usage in the tooltip", () => {
     renderSection([past(1)]);
 
