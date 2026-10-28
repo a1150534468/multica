@@ -420,6 +420,19 @@ Object.assign(DRAWINGS, {
   GitPullRequestDraft: `<circle cx="6.25" cy="6" r="2.75"/><circle cx="17.75" cy="18" r="2.75"/><path d="M6.25 8.75v12.5"/>${dot(17.75, 6, 1.3)}${dot(17.75, 11, 1.3)}`,
   BotOff: `${DRAWINGS.Bot}<path d="m2.5 2.5 19 19"/>`,
   PencilLine: `${DRAWINGS.Pencil}<path d="M13 20.25h7.5"/>`,
+
+  // Command palette
+  BellOff: `${DRAWINGS.Bell}<path d="m3 3 18 18"/>`,
+  BellRing: `${DRAWINGS.Bell}<path d="M3.25 9.5c.2-2.1 1.05-3.95 2.5-5.25M20.75 9.5c-.2-2.1-1.05-3.95-2.5-5.25"/>`,
+  CalendarX: `<path class="b" d="${rect(3, 4.25, 18, 17, 7)}"/><path d="M8 2.75v3M16 2.75v3M3 9.75h18"/>
+    <path class="k" d="m9.75 13.25 4.5 4.5M14.25 13.25l-4.5 4.5"/>`,
+  FolderPlus: `<path class="b" d="${folderBody}"/><path class="k" d="M12 10.25v6M9 13.25h6"/>`,
+  FolderInput: `<path class="b" d="${folderBody}"/><path class="k" d="M8 13.25h7.5M13 10.5s2.75 2.2 2.75 2.75S13 16 13 16"/>`,
+  MailOpen: `<path class="b" d="${shape([[2.75, 9.5, 3], [12, 3.25, 3], [21.25, 9.5, 3], [21.25, 20.25, 5], [2.75, 20.25, 5]])}"/>
+    <path class="k" d="M6.5 12.75s3.9 2.75 5.5 2.75 5.5-2.75 5.5-2.75"/>`,
+  MessageCircleQuestion: `<path class="b" d="M12 21a9 9 0 1 0-7.85-4.6l-.95 3.3c-.2.7.4 1.3 1.1 1.1l3.3-.95A9 9 0 0 0 12 21Z"/><path class="k" d="M9.6 9.6a2.45 2.45 0 1 1 3.42 2.25c-.6.27-1.02.85-1.02 1.5v.4"/>
+    <circle class="k" fill="currentColor" stroke="none" cx="12" cy="16.75" r="1.15"/>`,
+  SquarePlus: `<path class="b" d="${rect(3, 3, 18, 18, 7)}"/><path class="k" d="M12 8v8M8 12h8"/>`,
 });
 
 /** Product names that render an existing drawing. */
