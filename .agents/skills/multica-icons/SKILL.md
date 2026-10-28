@@ -29,6 +29,7 @@ Every icon in the product is a Multica drawing exported from `@multica/ui/icons`
 
   Do not hand-write `a r r` arc corners for rectangles.
 - **Arrowheads and chevrons.** Use `head(x, y, dir, depth, half)` for a soft arrowhead with its tip at (x, y). For chevrons, copy the existing `M… s…` soft curves. Never use sharp polyline arrowheads.
+- **Checks.** Use `tick(a, v, b)`: two straight strokes meeting at a tight vertex. Never bow a stroke through a curve where it should turn a corner; a check or any other angular mark drawn that way reads as handwriting.
 - **Dots.** `dot(x, y, r)` with r 1.1–1.5. Use dots only where they carry meaning: info, alert, eyes, status lights.
 - **Polygons and stars.** `polygon(cx, cy, radii, count, k)`.
 - **Reuse parts.** `file()`, `folderBody`, `bubble`, `ring`, `user()`, `link`, `cw` and `ccw` already exist. A variant (`…Off`, `…Plus`, `…X`) is the base drawing plus one stroke. A slash runs `m3 3 18 18`.
