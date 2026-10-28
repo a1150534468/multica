@@ -4,7 +4,7 @@ import { createShortcutChord } from "@multica/core/shortcuts";
 import { ShortcutKeycaps } from "./shortcut-keycaps";
 
 describe("ShortcutKeycaps", () => {
-  it("uses Lucide icons for macOS Command and Enter", () => {
+  it("uses icons for macOS Command and Enter", () => {
     const { container } = render(
       <ShortcutKeycaps
         shortcut={createShortcutChord("Enter", { primary: true })}
@@ -45,7 +45,7 @@ describe("ShortcutKeycaps", () => {
     expect(container.querySelector(".icon-command")).not.toBeInTheDocument();
   });
 
-  it("falls back to compact text when Lucide has no exact semantic icon", () => {
+  it("falls back to compact text when there is no exact semantic icon", () => {
     const { container } = render(
       <ShortcutKeycaps shortcut={createShortcutChord("Escape")} platform="linux" />,
     );

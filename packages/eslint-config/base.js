@@ -2,13 +2,20 @@ import eslint from "@eslint/js";
 import tseslint from "typescript-eslint";
 import importPlugin from "eslint-plugin-import-x";
 
-// Icons are owned by @multica/ui/icons so a glyph can be redrawn in one place.
-// Exported because flat config replaces a rule's options wholesale: a package
-// that sets its own `no-restricted-imports` must include this entry again.
-export const ICON_LIBRARY_IMPORT_RESTRICTION = {
-  name: "lucide-react",
-  message: "Import icons from @multica/ui/icons instead.",
-};
+// Multica draws its own icons: every glyph comes from @multica/ui/icons, and a
+// missing one is drawn in packages/ui/icons/drawings. Exported because flat
+// config replaces a rule's options wholesale: a package that sets its own
+// `no-restricted-imports` must spread these entries again.
+const ICON_LIBRARY_MESSAGE =
+  "Import icons from @multica/ui/icons; draw a missing one in packages/ui/icons/drawings (see .agents/skills/multica-icons).";
+export const ICON_LIBRARY_IMPORT_RESTRICTIONS = [
+  "lucide-react",
+  "react-icons",
+  "@heroicons/react",
+  "@tabler/icons-react",
+  "@radix-ui/react-icons",
+  "@phosphor-icons/react",
+].map((name) => ({ name, message: ICON_LIBRARY_MESSAGE }));
 
 /** @type {import("eslint").Linter.Config[]} */
 export default [
@@ -41,7 +48,7 @@ export default [
         peerDependencies: true,
       }],
       "no-restricted-imports": ["error", {
-        paths: [ICON_LIBRARY_IMPORT_RESTRICTION],
+        paths: ICON_LIBRARY_IMPORT_RESTRICTIONS,
       }],
     },
   },
