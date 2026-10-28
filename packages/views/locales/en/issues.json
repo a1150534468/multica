@@ -780,7 +780,8 @@
     "more_runs_other": "Show {{count}} more",
     "strip_aria": "Cost per run — open the run timeline",
     "strip_no_usage": "No usage recorded",
-    "sparkline_now": "Now"
+    "queued_count_one": "{{count}} queued",
+    "queued_count_other": "{{count}} queued"
   },
   "runs_timeline": {
     "title": "Runs",
