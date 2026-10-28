@@ -30,7 +30,7 @@ import { StatusIcon } from "../../issues/components/status-icon";
 import { ProjectIcon } from "../../projects/components/project-icon";
 import { useT } from "../../i18n";
 import { PANEL_ROW_CLASS, PanelList, PanelSection, isPathWithin, panelRowStateClass } from "../panel-nav";
-import { IssueAgentBadge, useIssueAgentState } from "./sidebar-tree";
+import { IssueAgentBadge, SIDEBAR_SHIMMER_CLASS, useIssueAgentState } from "./sidebar-tree";
 
 // Stable empty default: an inline `= []` on useQuery is a new reference every
 // render while the query is disabled, which re-fires the sync effect below.
@@ -226,7 +226,7 @@ function SortablePinItem({
         )}
       >
         {iconNode}
-        <ShimmerText active={running} className="min-w-0 flex-1 truncate">
+        <ShimmerText active={running} className={cn("min-w-0 flex-1 truncate", SIDEBAR_SHIMMER_CLASS)}>
           {label}
         </ShimmerText>
         {/* Holds the same right-edge slot as a tree row's avatars, and yields
