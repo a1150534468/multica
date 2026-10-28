@@ -3,9 +3,9 @@ import reactConfig from "@multica/eslint-config/react";
 export default [
   ...reactConfig,
   {
-    files: ["icons/index.ts"],
-    rules: {
-      "no-restricted-imports": "off",
+    files: ["icons/drawings/*.mjs"],
+    languageOptions: {
+      globals: { process: "readonly", console: "readonly", URL: "readonly" },
     },
   },
 ];

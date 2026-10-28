@@ -61,13 +61,3 @@ export function createIcon(name: string, node: IconNode): IconComponent {
   Icon.displayName = name;
   return Icon;
 }
-
-/** Wraps a library glyph that has no Multica drawing yet so it shares the stroke and class names. */
-export function fromLibrary(name: string, Glyph: IconComponent): IconComponent {
-  const Icon = forwardRef<SVGSVGElement, Omit<IconProps, "ref">>(
-    ({ strokeWidth = ICON_STROKE_WIDTH, className, ...rest }, ref) =>
-      createElement(Glyph, { ref, strokeWidth, className: iconClassName(name, className), ...rest }),
-  );
-  Icon.displayName = name;
-  return Icon;
-}
