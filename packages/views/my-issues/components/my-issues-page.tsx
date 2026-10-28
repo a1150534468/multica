@@ -8,27 +8,16 @@ import {
   myIssuesViewStore,
 } from "@multica/core/issues/stores/my-issues-view-store";
 import { PageHeader } from "../../layout/page-header";
-import { RefreshablePageIcon } from "../../layout/refreshable-page-icon";
 import { IssueSurface } from "../../issues/surface/issue-surface";
+import { IssueViewHeader } from "../../issue-views/view-header";
 import { useT } from "../../i18n";
-import { MyIssuesHeader } from "./my-issues-header";
-import { NewIssueHeaderAction } from "../../issues/components/new-issue-header-action";
+
+const MY_BASE = { kind: "my" } as const;
 
 export function MyIssuesPage() {
   const { t } = useT("my-issues");
   const user = useAuthStore((s) => s.user);
   const scope = useStore(myIssuesViewStore, (s) => s.scope);
-  const setScope = useStore(myIssuesViewStore, (s) => s.setScope);
-
-  const renderTitle = (refreshing = false) => (
-    <PageHeader>
-      <RefreshablePageIcon refreshing={refreshing}>
-        <ListTodo className="size-4" />
-      </RefreshablePageIcon>
-      <h1 className="text-body font-medium">{t(($) => $.page.breadcrumb)}</h1>
-      <NewIssueHeaderAction className="ml-auto" />
-    </PageHeader>
-  );
 
   return (
     <div className="flex flex-1 min-h-0 flex-col">
@@ -41,20 +30,7 @@ export function MyIssuesPage() {
           }}
           modes={["board", "list", "table", "swimlane"]}
           batchToolbar="list"
-          renderHeader={({ controller }) => (
-            <>
-              {renderTitle(controller.isRefreshing)}
-              <MyIssuesHeader
-                allIssues={controller.surfaceIssues}
-                workingAgents={controller.workingAgents}
-                scope={scope}
-                onScopeChange={setScope}
-                facetCountsExact={controller.facetCountsExact}
-                tableFacetCounts={controller.tableFacetCounts}
-                onTableFacetChange={controller.setActiveTableFacet}
-              />
-            </>
-          )}
+          renderHeader={({ controller }) => <IssueViewHeader controller={controller} base={MY_BASE} />}
           renderEmpty={() => (
             <div className="flex flex-1 min-h-0 flex-col items-center justify-center gap-2 text-muted-foreground">
               <ListTodo className="h-10 w-10 text-faint-foreground" />
@@ -63,7 +39,12 @@ export function MyIssuesPage() {
             </div>
           )}
         />
-      ) : renderTitle()}
+      ) : (
+        <PageHeader>
+          <ListTodo className="size-4 text-muted-foreground" />
+          <h1 className="text-body font-medium">{t(($) => $.page.breadcrumb)}</h1>
+        </PageHeader>
+      )}
     </div>
   );
 }

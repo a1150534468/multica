@@ -18,6 +18,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@multica/ui/components/ui/button";
 import { TooltipHint } from "@multica/ui/components/common/tooltip-hint";
+import { cn } from "@multica/ui/lib/utils";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { memberListOptions, agentListOptions, squadListOptions } from "@multica/core/workspace/queries";
 import { projectListOptions } from "@multica/core/projects/queries";
@@ -43,7 +44,7 @@ import { useProjectStatusLabels } from "../../projects/components/labels";
 import { useT } from "../../i18n";
 
 /** One rendered chip: a dimension with its selected values summarised. */
-interface FilterChip {
+export interface FilterChip {
   key: string;
   icon: ReactNode;
   /** Dimension name, e.g. "状态". */
@@ -178,7 +179,7 @@ function DotStack({ colors }: { colors: string[] }) {
  * the save-view dialog. Name lookups reuse the caches the filter dropdown
  * already populates; a cache miss degrades a chip to a count, never blocks.
  */
-function useFilterChips(
+export function useFilterChips(
   dateFilter: IssueDateFilter | null,
   onDateFilterChange?: (filter: IssueDateFilter | null) => void,
   baseline?: IssueViewBaseline,
@@ -593,7 +594,7 @@ function useFilterChips(
   return { chips, hasAny: chips.length > 0, clearAll };
 }
 
-function ChipSpan({ chip }: { chip: FilterChip }) {
+export function ChipSpan({ chip, className }: { chip: FilterChip; className?: string }) {
   const { t } = useT("issues");
   const removeLabel = t(($) => $.filters.chip_remove, { name: chip.label });
   return (
@@ -601,7 +602,7 @@ function ChipSpan({ chip }: { chip: FilterChip }) {
     // first gains a value; value changes inside it re-render without
     // re-animating. No exit animation — unmount presence isn't worth the
     // machinery for a 150ms nicety.
-    <span className="flex h-6 max-w-72 items-center gap-1.5 rounded-md bg-background pl-2 pr-1 text-caption shadow-xs animate-in fade-in-0 zoom-in-95 duration-150">
+    <span className={cn("flex h-6 max-w-72 shrink-0 items-center gap-1.5 rounded-md bg-background pl-2 pr-1 text-caption shadow-xs animate-in fade-in-0 zoom-in-95 duration-150", className)}>
       <span className="flex shrink-0 items-center gap-1 text-muted-foreground">
         {chip.icon}
         <span>{chip.label}</span>

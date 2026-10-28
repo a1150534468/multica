@@ -11,7 +11,8 @@
     "usage": "分析",
     "runtimes": "ランタイム",
     "skills": "スキル",
-    "settings": "設定"
+    "settings": "設定",
+    "views": "ビュー"
   },
   "tab": {
     "issue": "タスク",
@@ -103,7 +104,15 @@
       "projects_order_created": "最近作成",
       "projects_show": "表示",
       "projects_only_mine": "自分がリードするプロジェクトのみ",
-      "projects_show_count": "未完了タスク数"
+      "projects_show_count": "未完了タスク数",
+      "new_view": "新規ビュー",
+      "all_views": "すべてのビュー",
+      "view_actions": "{{name}} の操作",
+      "view_copy_link": "リンクをコピー",
+      "view_remove": "サイドバーから削除",
+      "view_rename": "名前を変更",
+      "view_duplicate": "複製",
+      "view_delete": "ビューを削除"
     },
     "team": {
       "new_agent": "新規エージェント",

@@ -11,7 +11,8 @@
     "usage": "Analytics",
     "runtimes": "Runtimes",
     "skills": "Skills",
-    "settings": "Settings"
+    "settings": "Settings",
+    "views": "Views"
   },
   "tab": {
     "issue": "Issue",
@@ -104,7 +105,15 @@
       "projects_order_created": "Recently created",
       "projects_show": "Show",
       "projects_only_mine": "Only projects I lead",
-      "projects_show_count": "Open issue count"
+      "projects_show_count": "Open issue count",
+      "new_view": "New view",
+      "all_views": "All views",
+      "view_actions": "Actions for {{name}}",
+      "view_copy_link": "Copy link",
+      "view_remove": "Remove from sidebar",
+      "view_rename": "Rename",
+      "view_duplicate": "Duplicate",
+      "view_delete": "Delete view"
     },
     "team": {
       "new_agent": "New agent",

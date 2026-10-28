@@ -128,3 +128,19 @@ export function baselineFromQuery(query: Record<string, unknown>): IssueViewBase
     },
   };
 }
+
+/** How many filter dimensions a saved query constrains, for summaries. */
+export function issueViewFilterCount(query: Record<string, unknown>): number {
+  const { raw } = baselineFromQuery(query);
+  return (
+    [
+      raw.statusFilters.length,
+      raw.priorityFilters.length,
+      raw.assigneeFilters.length || raw.includeNoAssignee,
+      raw.creatorFilters.length,
+      raw.projectFilters.length || raw.includeNoProject,
+      raw.projectStatusFilters.length,
+      raw.labelFilters.length,
+    ].filter(Boolean).length + Object.keys(raw.propertyFilters).length
+  );
+}

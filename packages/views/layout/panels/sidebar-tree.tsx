@@ -27,11 +27,12 @@ interface TreeRowProps extends React.ComponentProps<"div"> {
   label: string;
   icon: React.ReactNode;
   active: boolean;
-  expanded: boolean;
-  onExpandedChange: (expanded: boolean) => void;
-  listId: string;
+  /** Omit the expand props for a row that only opens its page. */
+  expanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
+  listId?: string;
   /** Label for the expand toggle; `aria-expanded` carries its state. */
-  toggleLabel: string;
+  toggleLabel?: string;
   onPrefetch?: () => void;
   /** End of the row: a count, or a settings button. */
   trailing?: React.ReactNode;
@@ -63,6 +64,7 @@ export const TreeRow = forwardRef<HTMLAnchorElement, TreeRowProps>(function Tree
   linkRef,
 ) {
   const onKeyDown = (event: React.KeyboardEvent) => {
+    if (!onExpandedChange) return;
     if (event.key === "ArrowRight" && !expanded) {
       event.preventDefault();
       onExpandedChange(true);
@@ -91,7 +93,7 @@ export const TreeRow = forwardRef<HTMLAnchorElement, TreeRowProps>(function Tree
       >
         {label}
       </AppLink>
-      <button
+      {onExpandedChange && <button
         type="button"
         aria-label={toggleLabel}
         aria-expanded={expanded}
@@ -114,7 +116,7 @@ export const TreeRow = forwardRef<HTMLAnchorElement, TreeRowProps>(function Tree
             expanded && "rotate-90",
           )}
         />
-      </button>
+      </button>}
       <span className="flex-1" />
       {trailing}
     </div>

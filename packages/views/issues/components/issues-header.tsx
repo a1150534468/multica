@@ -1,6 +1,6 @@
 "use client";
 
-import { cloneElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { cloneElement, useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarDays,
   ChartGantt,
@@ -74,7 +74,6 @@ import type {
   IssueTableFacetSpec,
   IssueTableFacetsResponse,
   ProjectStatus,
-  WorkingAgentSummary,
 } from "@multica/core/types";
 import { formatActorRef, isActorPropertyType, isFilterablePropertyType, isListPropertyType, isScalarPropertyType, propertyFilterValueKey, PROPERTY_FILTER_OP_SYMBOLS, PROPERTY_FILTER_OPS_BY_TYPE, type PropertyFilterOp, type PropertyFilterValue } from "@multica/core/types";
 import { ProjectIcon } from "../../projects/components/project-icon";
@@ -100,33 +99,16 @@ import {
   type ViewMode,
 } from "@multica/core/issues/stores/view-store";
 import { useViewStore, useViewStoreApi } from "@multica/core/issues/stores/view-store-context";
-import { FilterChipsBar } from "./filter-chips-bar";
-import { SaveViewDialog, type SaveViewScope } from "./save-view-dialog";
-import { ViewBar } from "./view-bar";
-import { toast } from "sonner";
-import { useActiveIssueView } from "@multica/core/issue-views/use-active-view";
 import { useAuthStore } from "@multica/core/auth";
-import type { IssueViewScope } from "@multica/core/issue-views/queries";
-import { actorFilterKey, baselineFromQuery, type IssueViewBaseline } from "@multica/core/issue-views/baseline";
-import type { IssueView } from "@multica/core/api/schemas";
+import { actorFilterKey, type IssueViewBaseline } from "@multica/core/issue-views/baseline";
 import { addDaysDateOnly, dateOnlyToLocalDate, formatDateOnly, toDateOnly, todayDateOnly } from "@multica/core/issues/date";
-import {
-  useIssuesScope,
-  useIssuesScopeStore,
-  type IssuesScope,
-  type IssuesScopePageKey,
-} from "@multica/core/issues/stores/issues-scope-store";
-import { actorKindForViewVariant } from "@multica/core/issues/surface/scope";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@multica/ui/components/ui/tooltip";
-import { cn } from "@multica/ui/lib/utils";
-import { PAGE_GUTTER } from "../../layout/page-header";
 import { useT } from "../../i18n";
 import { useStatusOptions } from "../utils/status-options";
 import { useColumnStatuses } from "../surface/column-statuses-context";
 import { NO_PROPERTY_VALUE } from "../utils/filter";
 import { matchesPinyin } from "../../editor/extensions/pinyin-match";
 import { FILTER_ITEM_CLASS, HoverCheck } from "../../common/hover-check";
-import { WorkspaceAgentWorkingChip } from "./workspace-agent-working-chip";
 import { TableColumnPicker } from "./table-view";
 
 type LocalDateRange = {
@@ -303,10 +285,6 @@ function useIssueCounts(
     return { status, priority, assignee, creator, noAssignee, project, noProject, label, property };
   }, [allIssues, serverFacets]);
 }
-
-// Scope config
-
-const SCOPE_VALUES: IssuesScope[] = ["all", "members", "agents"];
 
 // Actor sub-menu content (shared between Assignee and Creator)
 
@@ -1176,254 +1154,10 @@ export function ViewRefreshIndicator({ active }: { active: boolean }) {
   );
 }
 
-// IssuesHeader
-
-export function IssuesHeader({
-  scopedIssues,
-  workingAgents,
-  allowGantt = false,
-  dateFilter = null,
-  onDateFilterChange,
-  isRefreshing,
-  facetCountsExact = true,
-  tableFacetCounts,
-  onTableFacetChange,
-  saveViewScope = { kind: "workspace" },
-}: {
-  scopedIssues: Issue[];
-  /** See IssueSurfaceController.workingAgents — the surface-scoped projection
-   *  behind the agents-working chip. */
-  workingAgents: WorkingAgentSummary[] | undefined;
-  allowGantt?: boolean;
-  dateFilter?: IssueDateFilter | null;
-  onDateFilterChange?: (filter: IssueDateFilter | null) => void;
-  /** Omit when the page title already displays refresh feedback. */
-  isRefreshing?: boolean;
-  /** See IssueDisplayControls.facetCountsExact. */
-  facetCountsExact?: boolean;
-  tableFacetCounts?: IssueTableFacetsResponse;
-  onTableFacetChange?: (facet: IssueTableFacetSpec | null) => void;
-  /** Where "save as view" files the view. /issues keeps the workspace
-   *  default; the project-detail fallback passes its project scope; `null`
-   *  hides the save affordance entirely. */
-  saveViewScope?: SaveViewScope | null;
-}) {
-  const { t } = useT("issues");
-  const [saveViewOpen, setSaveViewOpen] = useState(false);
-  const headerWsId = useWorkspaceId();
-  const viewListScope: IssueViewScope | null = saveViewScope
-    ? saveViewScope.kind === "project"
-      ? { scope_type: "project", scope_id: saveViewScope.projectId }
-      : { scope_type: saveViewScope.kind }
-    : null;
-  const { activeView, views, viewsReady, setActive, missing } = useActiveIssueView(
-    headerWsId,
-    viewListScope,
-  );
-  // The open view vanished (deleted / access revoked): fall back to the
-  // built-in default and say so — never a blank page (§7).
-  useEffect(() => {
-    if (missing) {
-      setActive(null);
-      toast.info(t(($) => $.view_selector.unavailable));
-    }
-  }, [missing, setActive, t]);
-  const viewBaseline = useMemo(
-    () => (activeView ? baselineFromQuery(activeView.query) : undefined),
-    [activeView],
-  );
-  const [editTarget, setEditTarget] = useState<{
-    view: IssueView;
-    fromDefinition: boolean;
-  } | null>(null);
-  const currentUserId = useAuthStore((s) => s.user?.id ?? null);
-  const isViewOwner = !!activeView && activeView.owner_id === currentUserId;
-  // The tab belongs to THIS page (Issues vs each project) — see
-  // IssuesScopePageKey. The header both renders the tabs and seeds the
-  // save-view dialog's default variant from them.
-  const scopePage: IssuesScopePageKey =
-    saveViewScope?.kind === "project"
-      ? `project:${saveViewScope.projectId}`
-      : "issues";
-  const scope = useIssuesScope(scopePage);
-  const setScopeForPage = useIssuesScopeStore((s) => s.setScope);
-  const setScope = useCallback(
-    (next: IssuesScope) => setScopeForPage(scopePage, next),
-    [setScopeForPage, scopePage],
-  );
-  // The save dialog's default variant: while a saved view is open the view's
-  // own variant wins (the rows on screen ARE that variant — a copy must not
-  // silently widen to the page tab); otherwise the page tab applies.
-  const dialogActorKind = activeView
-    ? actorKindForViewVariant(activeView.scope_variant)
-    : scope;
-  const dialogProjectId =
-    saveViewScope?.kind === "project" ? saveViewScope.projectId : null;
-  const dialogMyVariant =
-    saveViewScope?.kind === "my" ? saveViewScope.variant : null;
-  const dialogScope = useMemo<SaveViewScope | null>(() => {
-    if (dialogMyVariant) return { kind: "my", variant: dialogMyVariant };
-    if (dialogProjectId)
-      return {
-        kind: "project",
-        projectId: dialogProjectId,
-        actorKind: dialogActorKind,
-      };
-    if (saveViewScope) return { kind: "workspace", actorKind: dialogActorKind };
-    return null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- identity keyed on the primitive projections
-  }, [dialogMyVariant, dialogProjectId, dialogActorKind, !!saveViewScope]);
-  // Bind the workspace agents-working chip to the active view store so
-  // shared IssuesHeader consumers (/issues and project detail) toggle the
-  // same filter state as the rest of the display controls. /my-issues keeps
-  // its own sibling header and passes chip state explicitly.
-  const agentRunningFilter = useViewStore((s) => s.agentRunningFilter);
-  const toggleAgentRunningFilter = useViewStore(
-    (s) => s.toggleAgentRunningFilter,
-  );
-  const SCOPE_LABEL_KEY: Record<IssuesScope, "all_label" | "members_label" | "agents_label"> = {
-    all: "all_label",
-    members: "members_label",
-    agents: "agents_label",
-  };
-  const SCOPE_DESC_KEY: Record<IssuesScope, "all_description" | "members_description" | "agents_description"> = {
-    all: "all_description",
-    members: "members_description",
-    agents: "agents_description",
-  };
-
-  const scopeLabel = t(($) => $.scope[SCOPE_LABEL_KEY[scope]]);
-
-  return (
-    <>
-    <div className={cn("min-h-12 shrink-0 py-2 [-webkit-overflow-scrolling:touch]", PAGE_GUTTER)}>
-      <div className="flex w-full min-w-0 items-start justify-between gap-2">
-        {/* Left: the view bar — built-in tabs and saved views as one flat,
-            per-user ordered row; wraps instead of overflowing. */}
-        <div className="hidden min-w-0 flex-1 md:block">
-          {saveViewScope && viewListScope && (
-            <ViewBar
-              wsId={headerWsId}
-              scope={viewListScope}
-              builtins={SCOPE_VALUES.map((s) => ({
-                key: s,
-                label: t(($) => $.scope[SCOPE_LABEL_KEY[s]]),
-                description: t(($) => $.scope[SCOPE_DESC_KEY[s]]),
-                active: !activeView && scope === s,
-                onSelect: () => {
-                  // Built-in tabs exit any open saved view; the surface
-                  // returns to its untouched per-tab state.
-                  if (activeView) setActive(null);
-                  setScope(s);
-                },
-              }))}
-              views={views}
-              viewsReady={viewsReady}
-              activeView={activeView}
-              onSelectView={(view) => setActive(view ? view.id : null)}
-              onNewView={() => {
-                setEditTarget(null);
-                setSaveViewOpen(true);
-              }}
-              onEditView={(view) => {
-                setEditTarget({ view, fromDefinition: true });
-                setSaveViewOpen(true);
-              }}
-            />
-          )}
-        </div>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                variant="outline"
-                size="sm"
-                className="shrink-0 gap-1 text-muted-foreground md:hidden"
-              >
-                <span className="truncate">{scopeLabel}</span>
-                <ChevronDown className="size-3 text-muted-foreground" />
-              </Button>
-            }
-          />
-          <DropdownMenuContent align="start" className="w-auto">
-            <DropdownMenuRadioGroup value={scope} onValueChange={(value) => setScope(value as IssuesScope)}>
-              {SCOPE_VALUES.map((s) => (
-                <DropdownMenuRadioItem key={s} value={s}>
-                  {t(($) => $.scope[SCOPE_LABEL_KEY[s]])}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <div className="flex shrink-0 items-center gap-1">
-          {agentRunningFilter && (
-            <span className="mr-1 hidden text-caption text-muted-foreground md:inline">
-              {t(($) => $.agent_activity.filter_active_label)}
-            </span>
-          )}
-          <WorkspaceAgentWorkingChip
-            value={agentRunningFilter}
-            onToggle={toggleAgentRunningFilter}
-            agents={workingAgents}
-          />
-          <IssueDisplayControls
-            scopedIssues={scopedIssues}
-            allowGantt={allowGantt}
-            dateFilter={dateFilter}
-            onDateFilterChange={onDateFilterChange}
-            facetCountsExact={facetCountsExact}
-            tableFacetCounts={tableFacetCounts}
-            onTableFacetChange={onTableFacetChange}
-            viewBaseline={viewBaseline}
-          />
-          {isRefreshing !== undefined && <ViewRefreshIndicator active={isRefreshing} />}
-        </div>
-      </div>
-    </div>
-    <FilterChipsBar
-      dateFilter={dateFilter}
-      onDateFilterChange={onDateFilterChange}
-      viewBaseline={viewBaseline}
-      saveLabel={
-        activeView
-          ? isViewOwner
-            ? t(($) => $.filters.chip_edit)
-            : t(($) => $.filters.chip_save_as)
-          : undefined
-      }
-      onSave={
-        saveViewScope
-          ? () => {
-              setEditTarget(
-                activeView && isViewOwner
-                  ? { view: activeView, fromDefinition: false }
-                  : null,
-              );
-              setSaveViewOpen(true);
-            }
-          : undefined
-      }
-    />
-    {dialogScope && (
-      <SaveViewDialog
-        open={saveViewOpen}
-        onOpenChange={setSaveViewOpen}
-        scope={dialogScope}
-        editView={editTarget?.view ?? null}
-        seedFromDefinition={editTarget?.fromDefinition ?? false}
-      />
-    )}
-    </>
-  );
-}
-
 /**
  * The full filter menu (every dimension, search, counts) behind a caller-
- * supplied trigger. The toolbar wraps it in its labeled button; the
- * save-view dialog attaches it to a ghost "add filter" chip targeting the
- * draft store. Counts follow `scopedIssues` — pass nothing to hide them.
+ * supplied trigger. Counts follow `scopedIssues` — pass nothing to hide
+ * them.
  */
 export function IssueFilterMenu({
   trigger,
@@ -1437,8 +1171,13 @@ export function IssueFilterMenu({
   onOpenChange,
   freezeAnchor = false,
   viewBaseline,
+  leadingSections,
+  align = "end",
 }: {
   trigger: React.ReactElement;
+  align?: "start" | "end";
+  /** Rendered above the filter dimensions, e.g. the surface's scope axis. */
+  leadingSections?: React.ReactNode;
   tooltip?: string;
   scopedIssues?: Issue[];
   facetCountsExact?: boolean;
@@ -1545,7 +1284,13 @@ export function IssueFilterMenu({
       ) : (
         <DropdownMenuTrigger render={anchoredTrigger} />
       )}
-          <DropdownMenuContent align="end" className="w-auto" anchor={frozenAnchor ?? undefined}>
+          <DropdownMenuContent align={align} className="w-auto" anchor={frozenAnchor ?? undefined}>
+            {leadingSections && (
+              <>
+                {leadingSections}
+                <DropdownMenuSeparator />
+              </>
+            )}
             {/* Status */}
             <DropdownMenuSub
               onOpenChange={(open) =>
@@ -1879,9 +1624,12 @@ export function IssueDisplayControls({
   tableFacetCounts,
   onTableFacetChange,
   viewBaseline,
+  hideFilter = false,
 }: {
   scopedIssues: Issue[];
   hideViewToggle?: boolean;
+  /** The host renders its own filter trigger (the view header's chip row). */
+  hideFilter?: boolean;
   dateFilter?: IssueDateFilter | null;
   onDateFilterChange?: (filter: IssueDateFilter | null) => void;
   /** Open saved view: menu marks the view's values checked-and-disabled;
@@ -2061,7 +1809,7 @@ export function IssueDisplayControls({
 
   return (
     <div className="flex shrink-0 items-center gap-1">
-        <IssueFilterMenu
+        {!hideFilter && <IssueFilterMenu
           trigger={
             <Button
               variant={hasActiveFilters ? "default" : "outline"}
@@ -2091,7 +1839,7 @@ export function IssueDisplayControls({
           dateFilter={showDateFilter ? dateFilter : null}
           onDateFilterChange={onDateFilterChange}
           viewBaseline={viewBaseline}
-        />
+        />}
 
         {viewMode === "table" && (
           <DropdownMenu
@@ -2106,7 +1854,7 @@ export function IssueDisplayControls({
                   className={controlButtonClass}
                 >
                   <Rows3 className="size-3.5" />
-                  <span className="hidden md:inline">
+                  <span className="hidden md:inline @max-3xl/issue-header:hidden">
                     {effectiveTableGrouping === "none"
                       ? t(($) => $.table.group_label)
                       : t(($) => $.table.group_active, {
@@ -2164,7 +1912,7 @@ export function IssueDisplayControls({
                 className={controlButtonClass}
               >
                 <Columns3 className="size-3.5" />
-                <span className="hidden md:inline">
+                <span className="hidden md:inline @max-3xl/issue-header:hidden">
                   {t(($) => $.table.columns.section)}
                 </span>
                 <ChevronDown className="size-3 text-muted-foreground" />
@@ -2182,7 +1930,7 @@ export function IssueDisplayControls({
                   render={
                     <Button variant="outline" size="sm" className={controlButtonClass}>
                       <SlidersHorizontal className="size-3.5" />
-                      <span className="hidden md:inline">{t(($) => $.display.button)}</span>
+                      <span className="hidden md:inline @max-3xl/issue-header:hidden">{t(($) => $.display.button)}</span>
                     </Button>
                   }
                 />
@@ -2450,7 +2198,7 @@ export function IssueDisplayControls({
                         ) : (
                           <List className="size-3.5" />
                         )}
-                        <span className="hidden md:inline">
+                        <span className="hidden md:inline @max-3xl/issue-header:hidden">
                           {viewMode === "board"
                             ? t(($) => $.view.board)
                             : viewMode === "table"

@@ -6,7 +6,7 @@ import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type D
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { restrictToFirstScrollableAncestor, restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { CSS } from "@dnd-kit/utilities";
-import { Layers, Plus } from "@multica/ui/icons";
+import { Plus } from "@multica/ui/icons";
 import { cn } from "@multica/ui/lib/utils";
 import { IconButton } from "@multica/ui/components/common/icon-button";
 import { useIssueStatuses } from "@multica/core/issue-statuses/hooks";
@@ -15,13 +15,10 @@ import {
   SIDEBAR_FIRST_PAGE,
   projectSidebarParams,
   projectSidebarSource,
-  viewSidebarParams,
-  viewSidebarSource,
 } from "@multica/core/issues/sidebar-list";
 import { useSidebarTreeStore } from "@multica/core/issues/stores/sidebar-tree-store";
 import { useModalStore } from "@multica/core/modals";
 import { useWorkspacePaths } from "@multica/core/paths";
-import type { IssueView } from "@multica/core/api/schemas";
 import type { ListIssuesParams, ListIssuesResponse, Project } from "@multica/core/types";
 import { ProjectIcon } from "../../projects/components/project-icon";
 import { useT } from "../../i18n";
@@ -214,97 +211,6 @@ function ProjectTreeItem({
           event.preventDefault();
         }}
         trailing={showCount ? <PanelCount value={project.issue_count - project.done_count} /> : null}
-      />
-      {expanded && (
-        <SidebarIssueList
-          id={listId}
-          wsId={wsId}
-          source={source}
-          params={params}
-          activeIssueId={activeIssueId}
-          onCollapse={() => {
-            setExpanded(false);
-            linkRef.current?.focus();
-          }}
-        />
-      )}
-    </li>
-  );
-}
-
-export function ViewsSection({
-  wsId,
-  views,
-  projects,
-  isActive,
-  onNavigate,
-  activeIssueId,
-}: {
-  wsId: string;
-  views: IssueView[];
-  projects: Project[];
-  isActive: (view: IssueView) => boolean;
-  onNavigate: (view: IssueView) => void;
-  activeIssueId: string | null;
-}) {
-  const { t } = useT("layout");
-  return (
-    <PanelSection label={t(($) => $.panels.work.views)}>
-      <PanelList>
-        {views.map((view) => (
-          <ViewTreeItem
-            key={view.id}
-            wsId={wsId}
-            view={view}
-            projects={projects}
-            active={isActive(view)}
-            onNavigate={() => onNavigate(view)}
-            activeIssueId={activeIssueId}
-          />
-        ))}
-      </PanelList>
-    </PanelSection>
-  );
-}
-
-function ViewTreeItem({
-  wsId,
-  view,
-  projects,
-  active,
-  onNavigate,
-  activeIssueId,
-}: {
-  wsId: string;
-  view: IssueView;
-  projects: Project[];
-  active: boolean;
-  onNavigate: () => void;
-  activeIssueId: string | null;
-}) {
-  const { t } = useT("layout");
-  const p = useWorkspacePaths();
-  const listId = useId();
-  const linkRef = useRef<HTMLAnchorElement>(null);
-  const source = viewSidebarSource(view.id);
-  const [expanded, setExpanded] = useExpanded(source);
-  const params = viewSidebarParams(view, projects);
-  const prefetch = usePrefetch(wsId, source, params);
-
-  return (
-    <li>
-      <TreeRow
-        ref={linkRef}
-        href={`${p.issues()}?view=${view.id}`}
-        label={view.name}
-        icon={<Layers className="size-3.5" />}
-        active={active}
-        expanded={expanded}
-        onExpandedChange={setExpanded}
-        listId={listId}
-        toggleLabel={t(($) => $.panels.work.project_issues, { name: view.name })}
-        onPrefetch={prefetch}
-        onNavigate={onNavigate}
       />
       {expanded && (
         <SidebarIssueList

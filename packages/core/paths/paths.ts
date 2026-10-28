@@ -64,6 +64,7 @@ function workspaceScoped(slug: string) {
     chatSession: (sessionId: string) =>
       `${ws}/chat?session=${encode(sessionId)}`,
     myIssues: () => `${ws}/my-issues`,
+    views: () => `${ws}/views`,
     runtimes: () => `${ws}/runtimes`,
     runtimeDetail: (id: string) => `${ws}/runtimes/${encode(id)}`,
     runtimeSettings: (machineId: string, runtimeId: string) =>

@@ -63,15 +63,46 @@ const VIEW_SORTS = new Set<string>([
   "due_date",
 ]);
 
+type SidebarViewFields = Pick<IssueView, "query" | "display" | "scope_variant"> &
+  Partial<Pick<IssueView, "scope_type" | "scope_id">>;
+
 /**
- * List params for an expanded saved view: its own filters and ordering, so
+ * Whether the list endpoint can express the view's scope. "My issues → any"
+ * is a union of relations only the table channel answers, so its sidebar row
+ * opens the page instead of expanding.
+ */
+export function viewHasSidebarPreview(view: SidebarViewFields): boolean {
+  return !(view.scope_type === "my" && (view.scope_variant ?? "any") === "any");
+}
+
+function viewScopeParams(view: SidebarViewFields, userId: string | undefined): ListIssuesParams | null {
+  if (view.scope_type === "project") return view.scope_id ? { project_id: view.scope_id } : null;
+  if (view.scope_type !== "my") return {};
+  if (!userId) return null;
+  switch (view.scope_variant) {
+    case "assigned":
+      return { assignee_id: userId };
+    case "created":
+      return { creator_id: userId };
+    case "involved":
+      return { involves_user_id: userId };
+    default:
+      return null;
+  }
+}
+
+/**
+ * List params for an expanded saved view: its scope, filters and ordering, so
  * the sidebar lists what opening the view shows. `null` when the view can
  * match nothing.
  */
 export function viewSidebarParams(
-  view: Pick<IssueView, "query" | "display" | "scope_variant">,
+  view: SidebarViewFields,
   projects: readonly Pick<Project, "id" | "status">[],
+  userId?: string,
 ): ListIssuesParams | null {
+  const scopeParams = viewScopeParams(view, userId);
+  if (!scopeParams) return null;
   const { raw } = baselineFromQuery(view.query);
   let projectIds = raw.projectFilters;
   // The list endpoint has no project-status facet; resolve it to project ids.
@@ -93,6 +124,7 @@ export function viewSidebarParams(
   );
 
   return {
+    ...scopeParams,
     ...(raw.statusFilters.length > 0 ? { statuses: raw.statusFilters } : {}),
     ...(raw.priorityFilters.length > 0 ? { priorities: raw.priorityFilters } : {}),
     ...(raw.assigneeFilters.length > 0 ? { assignee_filters: raw.assigneeFilters } : {}),

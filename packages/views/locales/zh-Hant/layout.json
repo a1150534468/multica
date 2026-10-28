@@ -11,7 +11,8 @@
     "usage": "統計",
     "runtimes": "執行時",
     "skills": "Skills",
-    "settings": "設定"
+    "settings": "設定",
+    "views": "檢視"
   },
   "tab": {
     "issue": "任務",
@@ -103,7 +104,15 @@
       "projects_order_created": "最近建立",
       "projects_show": "顯示",
       "projects_only_mine": "只看我負責的專案",
-      "projects_show_count": "未完成任務數"
+      "projects_show_count": "未完成任務數",
+      "new_view": "新增檢視",
+      "all_views": "全部檢視",
+      "view_actions": "{{name}} 的操作",
+      "view_copy_link": "複製連結",
+      "view_remove": "從側欄移除",
+      "view_rename": "重新命名",
+      "view_duplicate": "建立副本",
+      "view_delete": "刪除檢視"
     },
     "team": {
       "new_agent": "新建智慧體",

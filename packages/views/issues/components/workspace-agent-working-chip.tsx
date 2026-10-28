@@ -166,10 +166,10 @@ export function WorkspaceAgentWorkingChip({
       {activity === "some" && (
         <AgentAvatarStack agentIds={agentIds} size="sm" max={3} />
       )}
-      <span className="tabular-nums md:hidden">
+      <span className="tabular-nums md:hidden @max-3xl/issue-header:inline">
         {activity === "unknown" ? "—" : agentIds.length}
       </span>
-      <span className="hidden tabular-nums md:inline">{label}</span>
+      <span className="hidden tabular-nums md:inline @max-3xl/issue-header:hidden">{label}</span>
     </Button>
   );
 

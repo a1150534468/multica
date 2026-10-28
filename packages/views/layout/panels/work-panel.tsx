@@ -2,36 +2,27 @@
 
 import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useStore } from "zustand";
-import { Bot, CircleUser, ListTodo, SquarePen } from "@multica/ui/icons";
+import { SquarePen } from "@multica/ui/icons";
 import { IconButton } from "@multica/ui/components/common/icon-button";
 import { useAuthStore } from "@multica/core/auth";
 import { useCurrentWorkspace, useWorkspacePaths } from "@multica/core/paths";
-import { myIssuesViewStore } from "@multica/core/issues/stores";
 import { useIssueDraftStore } from "@multica/core/issues/stores/draft-store";
 import { openCreateIssueWithPreference } from "@multica/core/issues/stores/create-mode-store";
-import { issueViewListOptions } from "@multica/core/issue-views/queries";
-import {
-  issueViewContainerKey,
-  useActiveIssueViewStore,
-} from "@multica/core/issue-views/active-view-store";
 import { issueDetailOptions } from "@multica/core/issues/queries";
 import { projectSidebarSource, sidebarProjects } from "@multica/core/issues/sidebar-list";
 import { useSidebarTreeStore } from "@multica/core/issues/stores/sidebar-tree-store";
 import { projectListOptions } from "@multica/core/projects/queries";
 import { useShortcut } from "@multica/core/shortcuts";
-import type { IssueView } from "@multica/core/api/schemas";
 import type { Project } from "@multica/core/types";
 import { useNavigation } from "../../navigation";
 import { ShortcutKeycaps } from "../../common/shortcut-keycaps";
 import { useT } from "../../i18n";
-import { PanelBody, PanelHeader, PanelLink, PanelList, isPathWithin } from "../panel-nav";
+import { PanelBody, PanelHeader } from "../panel-nav";
 import { PinnedSection, usePanelPins } from "./pinned-section";
-import { ProjectsSection, ViewsSection, useIssueShownInTree } from "./work-tree";
+import { ProjectsSection, useIssueShownInTree } from "./work-tree";
+import { ViewsSection } from "./views-section";
 
 const EMPTY_PROJECTS: Project[] = [];
-const EMPTY_VIEWS: IssueView[] = [];
-const WORKSPACE_VIEW_SCOPE = { scope_type: "workspace" } as const;
 
 /** The `{id}` of an `/issues/{id}` route — a UUID or an identifier like `MUL-123`. */
 function issueRouteSegment(pathname: string, issuesPath: string): string | null {
@@ -53,8 +44,6 @@ export function WorkPanel() {
   const wsId = useCurrentWorkspace()?.id;
   const userId = useAuthStore((s) => s.user?.id);
   const createIssueShortcut = useShortcut("createIssue");
-  const myIssuesScope = useStore(myIssuesViewStore, (s) => s.scope);
-  const setMyIssuesScope = useStore(myIssuesViewStore, (s) => s.setScope);
   const pins = usePanelPins(wsId, userId, pathname);
 
   const { data: projects = EMPTY_PROJECTS } = useQuery({
@@ -84,17 +73,6 @@ export function WorkPanel() {
   }, [projects, projectSettings, projectOrder, userId, revealProjectId]);
   // A tree row takes the highlight from "All issues" while it lists the issue.
   const issueLitInTree = useIssueShownInTree(wsId ?? "", currentIssueId);
-  // Older backends without the views endpoint error here; the section hides.
-  const { data: views = EMPTY_VIEWS } = useQuery({
-    ...issueViewListOptions(wsId ?? "", WORKSPACE_VIEW_SCOPE),
-    enabled: !!wsId,
-  });
-  const viewContainerKey = issueViewContainerKey(wsId ?? "", WORKSPACE_VIEW_SCOPE);
-  const activeViewId = useActiveIssueViewStore((s) => s.active[viewContainerKey] ?? null);
-  const setActiveView = useActiveIssueViewStore((s) => s.setActive);
-
-  const onMyIssues = pathname === p.myIssues();
-  const onIssues = pathname === p.issues();
   const plainRowsLit = !pins.isActivePinnedRoute;
 
   return (
@@ -116,49 +94,19 @@ export function WorkPanel() {
         </IconButton>
       </PanelHeader>
       <PanelBody>
-        <PanelList>
-          <PanelLink
-            href={p.myIssues()}
-            icon={<CircleUser />}
-            label={t(($) => $.nav.my_issues)}
-            active={plainRowsLit && onMyIssues && myIssuesScope !== "agents"}
-            onNavigate={() => {
-              if (myIssuesScope === "agents") setMyIssuesScope("assigned");
-            }}
-          />
-          <PanelLink
-            href={p.myIssues()}
-            icon={<Bot />}
-            label={t(($) => $.panels.work.my_agents)}
-            active={plainRowsLit && onMyIssues && myIssuesScope === "agents"}
-            onNavigate={() => setMyIssuesScope("agents")}
-          />
-          <PanelLink
-            href={p.issues()}
-            icon={<ListTodo />}
-            label={t(($) => $.panels.work.all_issues)}
-            active={
-              plainRowsLit &&
-              (onIssues
-                ? activeViewId === null
-                : !issueLitInTree && isPathWithin(pathname, p.issues()))
-            }
-            onNavigate={() => setActiveView(viewContainerKey, null)}
-          />
-        </PanelList>
-
-        {wsId && <PinnedSection pins={pins} wsId={wsId} pathname={pathname} />}
-
-        {wsId && views.length > 0 && (
+        {wsId && (
           <ViewsSection
             wsId={wsId}
-            views={views}
+            userId={userId}
+            pathname={pathname}
             projects={projects}
-            isActive={(view) => onIssues && activeViewId === view.id}
-            onNavigate={(view) => setActiveView(viewContainerKey, view.id)}
+            plainRowsLit={plainRowsLit}
+            issueLitInTree={issueLitInTree}
             activeIssueId={plainRowsLit ? currentIssueId : null}
           />
         )}
+
+        {wsId && <PinnedSection pins={pins} wsId={wsId} pathname={pathname} />}
 
         {wsId && (
           <ProjectsSection

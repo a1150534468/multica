@@ -4,6 +4,7 @@ import {
   projectSidebarParams,
   shownSidebarStatuses,
   sidebarProjects,
+  viewHasSidebarPreview,
   viewSidebarParams,
 } from "./sidebar-list";
 import {
@@ -88,6 +89,28 @@ describe("viewSidebarParams", () => {
     expect(
       viewSidebarParams({ query: { projectStatusFilters: ["paused"] }, display: {}, scope_variant: null }, projects),
     ).toBeNull();
+  });
+
+  it("scopes project and my views like the page they open", () => {
+    const base = { query: {}, display: {} };
+    expect(
+      viewSidebarParams({ ...base, scope_type: "project", scope_id: "p1", scope_variant: null }, []),
+    ).toMatchObject({ project_id: "p1" });
+    expect(
+      viewSidebarParams({ ...base, scope_type: "my", scope_id: null, scope_variant: "created" }, [], "u1"),
+    ).toMatchObject({ creator_id: "u1" });
+    expect(
+      viewSidebarParams({ ...base, scope_type: "my", scope_id: null, scope_variant: "involved" }, [], "u1"),
+    ).toMatchObject({ involves_user_id: "u1" });
+    expect(
+      viewSidebarParams({ ...base, scope_type: "my", scope_id: null, scope_variant: "assigned" }, []),
+    ).toBeNull();
+  });
+
+  it("does not preview the my-any union", () => {
+    expect(viewHasSidebarPreview({ query: {}, display: {}, scope_type: "my", scope_variant: "any" })).toBe(false);
+    expect(viewHasSidebarPreview({ query: {}, display: {}, scope_type: "my", scope_variant: "assigned" })).toBe(true);
+    expect(viewHasSidebarPreview({ query: {}, display: {}, scope_type: "workspace", scope_variant: null })).toBe(true);
   });
 });
 

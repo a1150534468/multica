@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   DndContext,
@@ -12,18 +12,13 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Layers, X } from "@multica/ui/icons";
+import { X } from "@multica/ui/icons";
 import { cn } from "@multica/ui/lib/utils";
 import { TooltipHint } from "@multica/ui/components/common/tooltip-hint";
 import { ApiError } from "@multica/core/api";
 import { useIssueStatuses } from "@multica/core/issue-statuses/hooks";
 import { issueStatusCategory } from "@multica/core/issues";
 import { issueDetailOptions } from "@multica/core/issues/queries";
-import { issueViewDetailOptions } from "@multica/core/issue-views/queries";
-import {
-  issueViewContainerKey,
-  useActiveIssueViewStore,
-} from "@multica/core/issue-views/active-view-store";
 import { projectDetailOptions } from "@multica/core/projects/queries";
 import { pinListOptions } from "@multica/core/pins/queries";
 import { useDeletePin, useReorderPins } from "@multica/core/pins/mutations";
@@ -41,11 +36,7 @@ const EMPTY_PINS: PinnedItem[] = [];
 const PINNED_PREVIEW_LIMIT = 5;
 
 function pinHref(p: WorkspacePaths, pin: PinnedItem): string {
-  if (pin.item_type === "issue") return p.issueDetail(pin.item_id);
-  if (pin.item_type === "project") return p.projectDetail(pin.item_id);
-  // Views know their target only after their detail loads — the row resolves
-  // its own href; this placeholder never renders as a link.
-  return "";
+  return pin.item_type === "issue" ? p.issueDetail(pin.item_id) : p.projectDetail(pin.item_id);
 }
 
 /**
@@ -55,10 +46,14 @@ function pinHref(p: WorkspacePaths, pin: PinnedItem): string {
  */
 export function usePanelPins(wsId: string | undefined, userId: string | undefined, pathname: string) {
   const p = useWorkspacePaths();
-  const { data: pinnedItems = EMPTY_PINS } = useQuery({
+  const { data: allPins = EMPTY_PINS } = useQuery({
     ...pinListOptions(wsId ?? "", userId ?? ""),
     enabled: !!wsId && !!userId,
   });
+  // View pins moved into the Views section's starred list; a reorder here
+  // still carries them so the cache keeps them.
+  const pinnedItems = useMemo(() => allPins.filter((pin) => pin.item_type !== "view"), [allPins]);
+  const viewPins = useMemo(() => allPins.filter((pin) => pin.item_type === "view"), [allPins]);
 
   // Local presentational copy for drop-animation stability. Follows the query
   // at rest; frozen during a drag so a mid-drag cache write (our own
@@ -78,9 +73,6 @@ export function usePanelPins(wsId: string | undefined, userId: string | undefine
   const visible = localPinnedWsId === (wsId ?? null) ? localPinned : EMPTY_PINS;
   const expanded = expandedWsId === (wsId ?? null);
   const displayed = expanded ? visible : visible.slice(0, PINNED_PREVIEW_LIMIT);
-  // View pins are absent here (their href resolves async): while a view pin
-  // is active the plain row for its surface stays highlighted too. Accepted —
-  // suppressing it would need every view detail lifted up here.
   const isActivePinnedRoute = displayed.some((pin) => pathname === pinHref(p, pin));
 
   return {
@@ -91,6 +83,7 @@ export function usePanelPins(wsId: string | undefined, userId: string | undefine
     setExpanded: (next: boolean) => setExpandedWsId(next ? wsId ?? null : null),
     setLocalPinned,
     isDraggingRef,
+    viewPins,
   };
 }
 
@@ -110,7 +103,7 @@ export function PinnedSection({
   const deletePin = useDeletePin();
   const reorderPins = useReorderPins();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
-  const { visible, displayed, expanded, setExpanded, setLocalPinned, isDraggingRef } = pins;
+  const { visible, displayed, expanded, setExpanded, setLocalPinned, isDraggingRef, viewPins } = pins;
 
   const handleDragStart = useCallback(() => {
     isDraggingRef.current = true;
@@ -125,9 +118,9 @@ export function PinnedSection({
       if (oldIndex === -1 || newIndex === -1) return;
       const reordered = arrayMove(visible, oldIndex, newIndex);
       setLocalPinned(reordered);
-      reorderPins.mutate(reordered);
+      reorderPins.mutate([...reordered, ...viewPins]);
     },
-    [isDraggingRef, reorderPins, setLocalPinned, visible],
+    [isDraggingRef, reorderPins, setLocalPinned, viewPins, visible],
   );
 
   if (visible.length === 0) return null;
@@ -260,72 +253,21 @@ function PinRow({
   wsId: string;
 }) {
   const isIssue = pin.item_type === "issue";
-  const isView = pin.item_type === "view";
   const statusCatalog = useIssueStatuses(wsId);
-  const p = useWorkspacePaths();
-  const setActiveView = useActiveIssueViewStore((s) => s.setActive);
-  const activeViewByContainer = useActiveIssueViewStore((s) => s.active);
   const issueQuery = useQuery({ ...issueDetailOptions(wsId, pin.item_id), enabled: isIssue });
   const projectQuery = useQuery({
     ...projectDetailOptions(wsId, pin.item_id),
     enabled: pin.item_type === "project",
   });
-  const viewQuery = useQuery({ ...issueViewDetailOptions(wsId, pin.item_id), enabled: isView });
 
   const triggeredRef = useRef(false);
   useEffect(() => {
-    // Views are exempt from 404-auto-unpin: an installed desktop client
-    // talking to an older backend without the view endpoints sees 404 for
-    // every view pin — auto-unpinning would permanently delete them all.
-    // A deleted view's row simply hides instead.
-    if (isView) return;
     const err = isIssue ? issueQuery.error : projectQuery.error;
     if (err instanceof ApiError && err.status === 404 && !triggeredRef.current) {
       triggeredRef.current = true;
       onUnpin();
     }
-  }, [isIssue, isView, issueQuery.error, onUnpin, projectQuery.error]);
-
-  if (isView) {
-    if (viewQuery.isPending) return <PinSkeleton />;
-    if (viewQuery.isError || !viewQuery.data) return null;
-    const view = viewQuery.data;
-    // One resolved scope drives the path AND the container key so an
-    // unrecognised scope_type from a newer backend degrades coherently.
-    const scopeType: "workspace" | "my" | "project" =
-      view.scope_type === "my"
-        ? "my"
-        : view.scope_type === "project" && view.scope_id
-          ? "project"
-          : "workspace";
-    const viewPath =
-      scopeType === "my"
-        ? p.myIssues()
-        : scopeType === "project"
-          ? p.projectDetail(view.scope_id!)
-          : p.issues();
-    const containerKey = issueViewContainerKey(wsId, {
-      scope_type: scopeType,
-      scope_id: scopeType === "project" ? view.scope_id : null,
-    });
-    return (
-      <SortablePinItem
-        pin={pin}
-        // ?view= keeps a web reload on the view for the surfaces that mount
-        // the URL-sync hook (/issues, /my-issues). Project pages don't sync
-        // yet — there the query is inert and reload falls back to the plain
-        // page; click-through activation still works everywhere.
-        href={`${viewPath}?view=${view.id}`}
-        onUnpin={onUnpin}
-        label={view.name}
-        iconNode={<Layers className="size-3.5" />}
-        // Active only when this exact view is open on its surface — the path
-        // alone also matches the plain tab.
-        active={pathname === viewPath && activeViewByContainer[containerKey] === view.id}
-        onNavigate={() => setActiveView(containerKey, view.id)}
-      />
-    );
-  }
+  }, [isIssue, issueQuery.error, onUnpin, projectQuery.error]);
 
   if (isIssue) {
     if (issueQuery.isPending) return <PinSkeleton />;

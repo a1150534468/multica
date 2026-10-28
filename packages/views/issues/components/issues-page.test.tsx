@@ -778,7 +778,7 @@ describe("IssuesPage (shared)", () => {
     expect(mockListIssues).not.toHaveBeenCalled();
   });
 
-  it("shows the 'Issues' section header without a workspace prefix", async () => {
+  it("titles the page with the built-in view, without a workspace prefix", async () => {
     mockListIssues.mockImplementation((params: any) =>
       Promise.resolve({
         issues: mockIssues.filter((i) => i.status === params?.status),
@@ -788,9 +788,7 @@ describe("IssuesPage (shared)", () => {
 
     renderWithQuery(<IssuesPage />);
 
-    await screen.findByText("Issues");
-    // The list header is now `icon + title`, matching the other list pages.
-    // The workspace/org name is no longer rendered as a breadcrumb prefix.
+    await screen.findByRole("heading", { name: "All issues" });
     expect(screen.queryByText("Test WS")).not.toBeInTheDocument();
   });
 
@@ -802,12 +800,15 @@ describe("IssuesPage (shared)", () => {
     await screen.findByText("No issues yet");
   });
 
-  it("shows scope tab buttons", async () => {
-    renderWithQuery(<IssuesPage />);
+  it("shows the assignee type as a chip only once it narrows the list", async () => {
+    const { unmount } = renderWithQuery(<IssuesPage />);
+    await screen.findByRole("heading", { name: "All issues" });
+    expect(screen.queryByText("Assigned to agents")).not.toBeInTheDocument();
+    unmount();
 
-    expect(await screen.findAllByText("All")).not.toHaveLength(0);
-    expect(screen.getByText("Members")).toBeInTheDocument();
-    expect(screen.getByText("Agents")).toBeInTheDocument();
+    mockScope = "agents";
+    renderWithQuery(<IssuesPage />);
+    expect(await screen.findAllByText("Assigned to agents")).not.toHaveLength(0);
   });
 
   // The Members/Agents tabs filter server-side via assignee_types (the same

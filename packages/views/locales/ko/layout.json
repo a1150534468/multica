@@ -11,7 +11,8 @@
     "usage": "분석",
     "runtimes": "런타임",
     "skills": "스킬",
-    "settings": "설정"
+    "settings": "설정",
+    "views": "뷰"
   },
   "tab": {
     "issue": "태스크",
@@ -103,7 +104,15 @@
       "projects_order_created": "최근 생성",
       "projects_show": "표시",
       "projects_only_mine": "내가 리드하는 프로젝트만",
-      "projects_show_count": "미완료 태스크 수"
+      "projects_show_count": "미완료 태스크 수",
+      "new_view": "새 뷰",
+      "all_views": "모든 뷰",
+      "view_actions": "{{name}} 작업",
+      "view_copy_link": "링크 복사",
+      "view_remove": "사이드바에서 제거",
+      "view_rename": "이름 변경",
+      "view_duplicate": "복제",
+      "view_delete": "뷰 삭제"
     },
     "team": {
       "new_agent": "새 에이전트",
