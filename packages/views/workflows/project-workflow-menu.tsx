@@ -61,14 +61,19 @@ export function ProjectWorkflowMenu({ project }: { project: Project }) {
         <DropdownMenuTrigger
           disabled={busy}
           render={
-            <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 shrink-0 gap-1.5 px-2 text-muted-foreground"
+              aria-label={workflow.name}
+            >
               <Workflow className="size-3.5" />
-              <span className="max-w-40 truncate">{workflow.name}</span>
+              <span className="max-w-40 truncate @max-md/issue-header:hidden">{workflow.name}</span>
               <ChevronDown className="size-3" />
             </Button>
           }
         />
-        <DropdownMenuContent align="end" className="w-64">
+        <DropdownMenuContent align="start" className="w-64">
           <DropdownMenuItem onClick={() => setFlowOpen(true)}>
             <ListTree className="size-3.5" />
             {t(($) => $.workflows.menu.view_flow)}

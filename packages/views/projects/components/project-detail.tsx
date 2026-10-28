@@ -535,26 +535,24 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
                     )}
                   </>
                 }
+                context={<ProjectWorkflowMenu project={project} />}
                 trailing={
-                  <>
-                    <ProjectWorkflowMenu project={project} />
-                    <Tooltip>
-                      <TooltipTrigger
-                        render={
-                          <Button
-                            variant={sidebarOpen ? "secondary" : "ghost"}
-                            size="icon-sm"
-                            className={sidebarOpen ? "" : "text-muted-foreground"}
-                            aria-label={t(($) => $.detail.sidebar_tooltip)}
-                            onClick={handleToggleSidebar}
-                          >
-                            <PanelRight />
-                          </Button>
-                        }
-                      />
-                      <TooltipContent side="bottom">{t(($) => $.detail.sidebar_tooltip)}</TooltipContent>
-                    </Tooltip>
-                  </>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          variant={sidebarOpen ? "secondary" : "ghost"}
+                          size="icon-sm"
+                          className={sidebarOpen ? "" : "text-muted-foreground"}
+                          aria-label={t(($) => $.detail.sidebar_tooltip)}
+                          onClick={handleToggleSidebar}
+                        >
+                          <PanelRight />
+                        </Button>
+                      }
+                    />
+                    <TooltipContent side="bottom">{t(($) => $.detail.sidebar_tooltip)}</TooltipContent>
+                  </Tooltip>
                 }
               />
             )}

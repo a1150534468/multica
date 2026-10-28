@@ -23,6 +23,7 @@ import {
   Users,
 } from "@multica/ui/icons";
 import { Button } from "@multica/ui/components/ui/button";
+import { Separator } from "@multica/ui/components/ui/separator";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -110,13 +111,16 @@ export function IssueViewHeader({
   controller,
   base,
   baseMenu,
+  context,
   trailing,
 }: {
   controller: IssueSurfaceController;
   base: IssueViewHeaderBase;
   /** Name-menu items for the page itself, e.g. project actions. */
   baseMenu?: ReactNode;
-  /** Controls after the display menu, e.g. the project's properties toggle. */
+  /** Page settings shown beside the title, e.g. the project's workflow. */
+  context?: ReactNode;
+  /** Layout toggles at the far end, e.g. the project's properties panel. */
   trailing?: ReactNode;
 }) {
   const { t } = useT("issues");
@@ -409,6 +413,8 @@ export function IssueViewHeader({
           </DropdownMenu>
         )}
 
+        {context}
+
         <IssueFilterMenu
           align="start"
           trigger={
@@ -488,7 +494,7 @@ export function IssueViewHeader({
         <Button
           variant="outline"
           size="sm"
-          className="h-8 w-8 gap-1 px-0 md:w-auto md:px-2.5"
+          className="h-8 w-8 gap-1 px-0 md:h-7 md:w-auto md:px-2.5"
           aria-label={t(($) => $.views.new_issue)}
           onClick={() => controller.openCreateIssue()}
         >
@@ -497,7 +503,12 @@ export function IssueViewHeader({
             <span className="hidden md:inline @max-3xl/issue-header:hidden">{t(($) => $.views.new_issue)}</span>
           )}
         </Button>
-        {trailing}
+        {trailing && (
+          <>
+            <Separator orientation="vertical" className="ml-1 data-vertical:h-4 data-vertical:self-center" />
+            {trailing}
+          </>
+        )}
       </div>
 
       <DeleteViewDialog
