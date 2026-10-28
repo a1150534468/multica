@@ -205,6 +205,7 @@
     "card_properties_section": "卡片屬性",
     "columns_section": "欄",
     "columns_locked_by_filter": "清除狀態篩選後才能顯示或隱藏欄。",
+    "columns_shown": "顯示 {{count}} 欄",
     "ascending_title": "升序",
     "descending_title": "降序",
     "newest_first": "最新優先",
@@ -237,7 +238,8 @@
     "card_project": "專案",
     "card_labels": "標籤",
     "card_child_progress": "子任務進度",
-    "show_sub_issues": "顯示子任務"
+    "show_sub_issues": "顯示子任務",
+    "layout_options": "{{layout}}選項"
   },
   "view": {
     "tooltip_board": "看板檢視",

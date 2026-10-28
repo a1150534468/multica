@@ -205,6 +205,7 @@
     "card_properties_section": "卡片属性",
     "columns_section": "列",
     "columns_locked_by_filter": "清除状态筛选后才能显示或隐藏列。",
+    "columns_shown": "显示 {{count}} 列",
     "ascending_title": "升序",
     "descending_title": "降序",
     "newest_first": "最新优先",
@@ -237,7 +238,8 @@
     "card_project": "项目",
     "card_labels": "标签",
     "card_child_progress": "子任务进度",
-    "show_sub_issues": "显示子任务"
+    "show_sub_issues": "显示子任务",
+    "layout_options": "{{layout}}选项"
   },
   "view": {
     "tooltip_board": "看板视图",

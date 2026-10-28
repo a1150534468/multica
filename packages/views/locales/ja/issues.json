@@ -205,6 +205,7 @@
     "card_properties_section": "カードのプロパティ",
     "columns_section": "列",
     "columns_locked_by_filter": "列を表示・非表示にするには、ステータスの絞り込みを解除してください。",
+    "columns_shown": "{{count}} 列を表示",
     "ascending_title": "昇順",
     "descending_title": "降順",
     "newest_first": "新しい順",
@@ -237,7 +238,8 @@
     "card_project": "プロジェクト",
     "card_labels": "ラベル",
     "card_child_progress": "サブタスクの進捗",
-    "show_sub_issues": "サブタスクを表示"
+    "show_sub_issues": "サブタスクを表示",
+    "layout_options": "{{layout}}のオプション"
   },
   "view": {
     "tooltip_board": "ボード表示",

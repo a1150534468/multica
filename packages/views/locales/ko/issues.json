@@ -205,6 +205,7 @@
     "card_properties_section": "카드 속성",
     "columns_section": "열",
     "columns_locked_by_filter": "열을 표시하거나 숨기려면 상태 필터를 해제하세요.",
+    "columns_shown": "{{count}}개 표시",
     "ascending_title": "오름차순",
     "descending_title": "내림차순",
     "newest_first": "최신순",
@@ -237,7 +238,8 @@
     "card_project": "프로젝트",
     "card_labels": "라벨",
     "card_child_progress": "하위 태스크 진행률",
-    "show_sub_issues": "하위 태스크 표시"
+    "show_sub_issues": "하위 태스크 표시",
+    "layout_options": "{{layout}} 옵션"
   },
   "view": {
     "tooltip_board": "보드 보기",

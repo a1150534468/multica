@@ -2,6 +2,7 @@
 
 import { cloneElement, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArrowUpDown,
   CalendarDays,
   ChartGantt,
   ChevronDown,
@@ -12,7 +13,6 @@ import {
   FolderKanban,
   FolderMinus,
   List,
-  Rows3,
   SignalHigh,
   SlidersHorizontal,
   Tag,
@@ -23,6 +23,7 @@ import {
   Waves,
 } from "@multica/ui/icons";
 import { Button } from "@multica/ui/components/ui/button";
+import { cn } from "@multica/ui/lib/utils";
 import { Spinner } from "@multica/ui/components/ui/spinner";
 import { Input } from "@multica/ui/components/ui/input";
 import {
@@ -1631,6 +1632,14 @@ export function IssueFilterMenu({
   );
 }
 
+const LAYOUTS: { mode: ViewMode; Icon: typeof List }[] = [
+  { mode: "board", Icon: Columns3 },
+  { mode: "list", Icon: List },
+  { mode: "table", Icon: Table2 },
+  { mode: "swimlane", Icon: Waves },
+  { mode: "gantt", Icon: ChartGantt },
+];
+
 export function IssueDisplayControls({
   scopedIssues,
   hideViewToggle = false,
@@ -1670,8 +1679,6 @@ export function IssueDisplayControls({
   onTableFacetChange?: (facet: IssueTableFacetSpec | null) => void;
 }) {
   const { t } = useT("issues");
-  const [tableGroupMenuOpen, setTableGroupMenuOpen] = useState(false);
-  const [viewMenuOpen, setViewMenuOpen] = useState(false);
   const viewMode = useViewStore((s) => s.viewMode);
   const statusFilters = useViewStore((s) => s.statusFilters);
   const priorityFilters = useViewStore((s) => s.priorityFilters);
@@ -1691,6 +1698,7 @@ export function IssueDisplayControls({
   const cardProperties = useViewStore((s) => s.cardProperties);
   const tableGrouping = useViewStore((s) => s.tableGrouping ?? "none");
   const tableHierarchy = useViewStore((s) => s.tableHierarchy ?? true);
+  const tableColumnCount = useViewStore((s) => s.tableColumns.length);
   const showSubIssues = useViewStore((s) => s.showSubIssues);
   const hiddenStatuses = useViewStore((s) => s.hiddenStatuses);
   const act = useViewStoreApi().getState();
@@ -1825,6 +1833,14 @@ export function IssueDisplayControls({
         : effectiveTableGrouping === "project"
           ? t(($) => $.table.columns.project)
           : t(($) => $.table.group_none);
+  // A Gantt layout persisted on a surface without Gantt renders as List.
+  const layout: ViewMode = viewMode === "gantt" && !allowGantt ? "list" : viewMode;
+  const layouts = LAYOUTS.filter(({ mode }) => mode !== "gantt" || allowGantt);
+  const LayoutIcon = hideViewToggle
+    ? SlidersHorizontal
+    : LAYOUTS.find(({ mode }) => mode === layout)!.Icon;
+  const hasLayoutOptions =
+    showColumnToggles || viewMode === "table" || availableCardPropertyOptions.length > 0;
   const controlButtonClass = "h-8 w-8 gap-1 px-0 text-muted-foreground md:h-7 md:w-auto md:px-2.5";
   const controlLabelClass = compact ? "sr-only" : "hidden md:inline @max-3xl/issue-header:hidden";
 
@@ -1862,96 +1878,21 @@ export function IssueDisplayControls({
           viewBaseline={viewBaseline}
         />}
 
-        {viewMode === "table" && (
-          <DropdownMenu
-            open={tableGroupMenuOpen}
-            onOpenChange={setTableGroupMenuOpen}
-          >
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className={controlButtonClass}
-                >
-                  <Rows3 className="size-3.5" />
-                  <span className={controlLabelClass}>
-                    {effectiveTableGrouping === "none"
-                      ? t(($) => $.table.group_label)
-                      : t(($) => $.table.group_active, {
-                          group: tableGroupingLabel,
-                        })}
-                  </span>
-                  <ChevronDown className="size-3 text-muted-foreground" />
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="end" className="w-auto min-w-48">
-              <DropdownMenuRadioGroup
-                value={effectiveTableGrouping}
-                onValueChange={(value) => {
-                  act.setTableGrouping(value as TableGrouping);
-                  setTableGroupMenuOpen(false);
-                }}
-              >
-                <DropdownMenuRadioItem value="none">
-                  {t(($) => $.table.group_none)}
-                </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="status">
-                  {t(($) => $.table.columns.status)}
-                </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="assignee">
-                  {t(($) => $.table.columns.assignee)}
-                </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="project">
-                  {t(($) => $.table.columns.project)}
-                </DropdownMenuRadioItem>
-                {tableGroupableProperties.map((property) => (
-                  <DropdownMenuRadioItem
-                    key={property.id}
-                    value={`property:${property.id}`}
-                  >
-                    <PropertyIcon
-                      property={property}
-                      className="size-3.5 text-caption"
-                    />
-                    <span>{property.name}</span>
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-
-        {viewMode === "table" && (
-          <TableColumnPicker
-            properties={workspaceProperties}
-            trigger={
-              <Button
-                variant="outline"
-                size="sm"
-                className={controlButtonClass}
-              >
-                <Columns3 className="size-3.5" />
-                <span className={controlLabelClass}>
-                  {t(($) => $.table.columns.section)}
-                </span>
-                <ChevronDown className="size-3 text-muted-foreground" />
-              </Button>
-            }
-          />
-        )}
-
-        {/* Display settings */}
         <Popover>
           <Tooltip>
             <PopoverTrigger
               render={
                 <TooltipTrigger
                   render={
-                    <Button variant="outline" size="sm" className={controlButtonClass}>
-                      <SlidersHorizontal className="size-3.5" />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={controlButtonClass}
+                      aria-label={t(($) => $.display.button)}
+                    >
+                      <LayoutIcon className="size-3.5" />
                       <span className={controlLabelClass}>{t(($) => $.display.button)}</span>
+                      <ChevronDown className={cn("size-3 text-muted-foreground", controlLabelClass)} />
                     </Button>
                   }
                 />
@@ -1959,11 +1900,32 @@ export function IssueDisplayControls({
             />
             <TooltipContent side="bottom">{t(($) => $.display.tooltip)}</TooltipContent>
           </Tooltip>
-          <PopoverContent align="end" className="w-72 p-3">
+          <PopoverContent align="end" className="w-88 p-3">
+            {/* Spacing separates sections — no dividers (see UI rules). */}
+            {!hideViewToggle && (
+              <div
+                role="group"
+                aria-label={t(($) => $.view.section)}
+                className={cn(
+                  "mb-3 grid gap-0.5 rounded-lg bg-muted p-0.5",
+                  layouts.length === 5 ? "grid-cols-5" : "grid-cols-4",
+                )}
+              >
+                {layouts.map(({ mode, Icon }) => (
+                  <Toggle
+                    key={mode}
+                    pressed={layout === mode}
+                    onPressedChange={() => act.setViewMode(mode)}
+                    title={t(($) => $.view[mode])}
+                    className="h-auto min-w-0 flex-col gap-1 rounded-md px-0.5 py-1.5 text-caption font-normal text-muted-foreground hover:bg-background/60 aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-sm"
+                  >
+                    <Icon className="size-4" />
+                    <span className="max-w-full truncate">{t(($) => $.view[mode])}</span>
+                  </Toggle>
+                ))}
+              </div>
+            )}
             <div className="space-y-3">
-              {/* Caption label left, control right; multi-control sections
-                  (Ordering, Card properties) stack the label on top. Spacing
-                  separates sections — no dividers (see UI rules). */}
               {viewMode === "board" && (
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-caption font-medium text-muted-foreground">
@@ -2035,6 +1997,124 @@ export function IssueDisplayControls({
                   </Select>
                 </div>
               )}
+              {viewMode === "table" && (
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-caption font-medium text-muted-foreground">
+                    {t(($) => $.display.grouping_section)}
+                  </span>
+                  <Select
+                    items={[
+                      { value: "none", label: t(($) => $.table.group_none) },
+                      { value: "status", label: t(($) => $.table.columns.status) },
+                      { value: "assignee", label: t(($) => $.table.columns.assignee) },
+                      { value: "project", label: t(($) => $.table.columns.project) },
+                      ...tableGroupableProperties.map((p) => ({
+                        value: `property:${p.id}`,
+                        label: p.name,
+                      })),
+                    ]}
+                    value={effectiveTableGrouping}
+                    onValueChange={(v) => {
+                      if (v) act.setTableGrouping(v as TableGrouping);
+                    }}
+                  >
+                    <SelectTrigger size="sm" className="w-32" aria-label={t(($) => $.display.grouping_section)}>
+                      <SelectValue>{tableGroupingLabel}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent align="end">
+                      <SelectGroup>
+                        <SelectItem value="none">{t(($) => $.table.group_none)}</SelectItem>
+                        <SelectItem value="status">{t(($) => $.table.columns.status)}</SelectItem>
+                        <SelectItem value="assignee">{t(($) => $.table.columns.assignee)}</SelectItem>
+                        <SelectItem value="project">{t(($) => $.table.columns.project)}</SelectItem>
+                        {tableGroupableProperties.map((property) => (
+                          <SelectItem key={property.id} value={`property:${property.id}`}>
+                            <PropertyIcon property={property} className="size-3.5 text-caption" />
+                            <span>{property.name}</span>
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-caption font-medium text-muted-foreground">
+                  {t(($) => $.display.ordering_section)}
+                </span>
+                <div className="flex min-w-0 items-center gap-1">
+                  {sortBy !== "position" && (
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            variant="outline"
+                            size="icon-sm"
+                            className="text-muted-foreground"
+                            onClick={() =>
+                              act.setSortDirection(sortDirection === "asc" ? "desc" : "asc")
+                            }
+                            aria-label={sortDirectionLabel}
+                          >
+                            <ArrowUpDown className="size-3.5" />
+                          </Button>
+                        }
+                      />
+                      <TooltipContent side="bottom">{sortDirectionLabel}</TooltipContent>
+                    </Tooltip>
+                  )}
+                  <Select
+                    items={[
+                      ...availableSortOptions.map((opt) => ({
+                        value: opt.value as string,
+                        label: t(($) => $.display[SORT_LABEL_KEY[opt.value as keyof typeof SORT_LABEL_KEY]]),
+                      })),
+                      ...sortableProperties.map((p) => ({
+                        value: `property:${p.id}`,
+                        label: p.name,
+                      })),
+                    ]}
+                    value={sortBy}
+                    onValueChange={(v) => {
+                      if (v) act.setSortBy(v as SortField);
+                    }}
+                  >
+                    <SelectTrigger size="sm" className="w-32" aria-label={t(($) => $.display.ordering_section)}>
+                      <SelectValue>{sortLabel}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent align="end">
+                      <SelectGroup>
+                      {availableSortOptions.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {t(($) => $.display[SORT_LABEL_KEY[opt.value as keyof typeof SORT_LABEL_KEY]])}
+                        </SelectItem>
+                      ))}
+                      {sortableProperties.map((property) => (
+                        <SelectItem key={property.id} value={`property:${property.id}`}>
+                          {property.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <label className="flex cursor-pointer items-center justify-between gap-3">
+                <span className="text-caption font-medium text-muted-foreground">
+                  {t(($) => $.display.show_sub_issues)}
+                </span>
+                <Switch
+                  size="sm"
+                  checked={showSubIssues}
+                  onCheckedChange={() => act.toggleShowSubIssues()}
+                />
+              </label>
+            </div>
+            {hasLayoutOptions && (
+              <div className="mt-5 space-y-3">
+                <p className="text-label font-medium text-foreground">
+                  {t(($) => $.display.layout_options, { layout: t(($) => $.view[layout]) })}
+                </p>
               {showColumnToggles && (
                 <div>
                   <span className="text-caption font-medium text-muted-foreground">
@@ -2091,73 +2171,26 @@ export function IssueDisplayControls({
                   />
                 </label>
               )}
-              <div>
-                <span className="text-caption font-medium text-muted-foreground">
-                  {t(($) => $.display.ordering_section)}
-                </span>
-                {/* Direction labels run up to "Reverse workflow order", so the
-                    pair gets the full popover width (w-72 keeps "Status" beside
-                    it untruncated): the field select absorbs the slack and
-                    truncates, the direction label never does. */}
-                <div className="mt-2 flex items-center gap-1.5">
-                  <Select
-                    items={[
-                      ...availableSortOptions.map((opt) => ({
-                        value: opt.value as string,
-                        label: t(($) => $.display[SORT_LABEL_KEY[opt.value as keyof typeof SORT_LABEL_KEY]]),
-                      })),
-                      ...sortableProperties.map((p) => ({
-                        value: `property:${p.id}`,
-                        label: p.name,
-                      })),
-                    ]}
-                    value={sortBy}
-                    onValueChange={(v) => {
-                      if (v) act.setSortBy(v as SortField);
-                    }}
-                  >
-                    <SelectTrigger size="sm" className="min-w-0 flex-1" aria-label={t(($) => $.display.ordering_section)}>
-                      <SelectValue>{sortLabel}</SelectValue>
-                    </SelectTrigger>
-                    <SelectContent align="end">
-                      <SelectGroup>
-                      {availableSortOptions.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {t(($) => $.display[SORT_LABEL_KEY[opt.value as keyof typeof SORT_LABEL_KEY]])}
-                        </SelectItem>
-                      ))}
-                      {sortableProperties.map((property) => (
-                        <SelectItem key={property.id} value={`property:${property.id}`}>
-                          {property.name}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                  {sortBy !== "position" && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        act.setSortDirection(sortDirection === "asc" ? "desc" : "asc")
-                      }
-                      aria-label={sortDirectionLabel}
-                    >
-                      {sortDirectionLabel}
-                    </Button>
-                  )}
+              {viewMode === "table" && (
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-caption font-medium text-muted-foreground">
+                    {t(($) => $.table.columns.section)}
+                  </span>
+                  <TableColumnPicker
+                    properties={workspaceProperties}
+                    trigger={
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-32 justify-between border-input pr-2 pl-2.5 text-body font-normal"
+                      >
+                        {t(($) => $.display.columns_shown, { count: tableColumnCount })}
+                        <ChevronDown className="size-4 text-muted-foreground" />
+                      </Button>
+                    }
+                  />
                 </div>
-              </div>
-              <label className="flex cursor-pointer items-center justify-between gap-3">
-                <span className="text-caption font-medium text-muted-foreground">
-                  {t(($) => $.display.show_sub_issues)}
-                </span>
-                <Switch
-                  size="sm"
-                  checked={showSubIssues}
-                  onCheckedChange={() => act.toggleShowSubIssues()}
-                />
-              </label>
+              )}
               {availableCardPropertyOptions.length > 0 && (
                 <div>
                   <span className="text-caption font-medium text-muted-foreground">
@@ -2193,97 +2226,10 @@ export function IssueDisplayControls({
                   </div>
                 </div>
               )}
-            </div>
+              </div>
+            )}
           </PopoverContent>
         </Popover>
-
-        {/* View toggle. If a store has `viewMode === "gantt"` persisted but
-            this surface doesn't render Gantt, fall back to "list" so the
-            trigger icon matches what's actually on screen. */}
-        {!hideViewToggle && (
-          <DropdownMenu open={viewMenuOpen} onOpenChange={setViewMenuOpen}>
-            <Tooltip>
-              <DropdownMenuTrigger
-                render={
-                  <TooltipTrigger
-                    render={
-                      <Button variant="outline" size="sm" className={controlButtonClass}>
-                        {viewMode === "board" ? (
-                          <Columns3 className="size-3.5" />
-                        ) : viewMode === "table" ? (
-                          <Table2 className="size-3.5" />
-                        ) : viewMode === "swimlane" ? (
-                          <Waves className="size-3.5" />
-                        ) : viewMode === "gantt" && allowGantt ? (
-                          <ChartGantt className="size-3.5" />
-                        ) : (
-                          <List className="size-3.5" />
-                        )}
-                        <span className={controlLabelClass}>
-                          {viewMode === "board"
-                            ? t(($) => $.view.board)
-                            : viewMode === "table"
-                            ? t(($) => $.view.table)
-                            : viewMode === "swimlane"
-                            ? t(($) => $.view.swimlane)
-                            : viewMode === "gantt" && allowGantt
-                            ? t(($) => $.view.gantt)
-                            : t(($) => $.view.list)}
-                        </span>
-                      </Button>
-                    }
-                  />
-                }
-              />
-              <TooltipContent side="bottom">
-                {viewMode === "board"
-                  ? t(($) => $.view.tooltip_board)
-                  : viewMode === "table"
-                  ? t(($) => $.view.tooltip_table)
-                  : viewMode === "swimlane"
-                  ? t(($) => $.view.tooltip_swimlane)
-                  : viewMode === "gantt" && allowGantt
-                  ? t(($) => $.view.tooltip_gantt)
-                  : t(($) => $.view.tooltip_list)}
-              </TooltipContent>
-            </Tooltip>
-            <DropdownMenuContent align="end" className="w-auto">
-              <DropdownMenuGroup>
-                <DropdownMenuLabel>{t(($) => $.view.section)}</DropdownMenuLabel>
-              </DropdownMenuGroup>
-              <DropdownMenuRadioGroup
-                value={viewMode}
-                onValueChange={(v) => {
-                  act.setViewMode(v as ViewMode);
-                  setViewMenuOpen(false);
-                }}
-              >
-                <DropdownMenuRadioItem value="board">
-                  <Columns3 />
-                  {t(($) => $.view.board)}
-                </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="list">
-                  <List />
-                  {t(($) => $.view.list)}
-                </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="table">
-                  <Table2 />
-                  {t(($) => $.view.table)}
-                </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="swimlane">
-                  <Waves />
-                  {t(($) => $.view.swimlane)}
-                </DropdownMenuRadioItem>
-                {allowGantt && (
-                  <DropdownMenuRadioItem value="gantt">
-                    <ChartGantt />
-                    {t(($) => $.view.gantt)}
-                  </DropdownMenuRadioItem>
-                )}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
 
     </div>
   );

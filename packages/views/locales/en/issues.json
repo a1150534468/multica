@@ -209,6 +209,7 @@
     "card_properties_section": "Card properties",
     "columns_section": "Columns",
     "columns_locked_by_filter": "Clear the status filter to show or hide columns.",
+    "columns_shown": "{{count}} shown",
     "ascending_title": "Ascending",
     "descending_title": "Descending",
     "newest_first": "Newest first",
@@ -241,7 +242,8 @@
     "card_project": "Project",
     "card_labels": "Labels",
     "card_child_progress": "Sub-issue progress",
-    "show_sub_issues": "Show sub-issues"
+    "show_sub_issues": "Show sub-issues",
+    "layout_options": "{{layout}} options"
   },
   "view": {
     "tooltip_board": "Board view",
