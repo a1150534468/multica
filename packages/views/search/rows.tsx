@@ -53,12 +53,25 @@ export function RowCheck({ label }: { label?: string }) {
   );
 }
 
-export function CommandRow({ command, query }: { command: PaletteCommand; query: string }) {
+export function CommandRow({
+  command,
+  query,
+  scope,
+}: {
+  command: PaletteCommand;
+  query: string;
+  /**
+   * The group the row belongs to. cmdk tracks selection by value, so two groups
+   * offering the same command (the previewed issue and the list selection
+   * around it) need distinct values or Enter runs the first group's row.
+   */
+  scope?: string;
+}) {
   const palette = usePalette();
   const Icon = command.icon;
   return (
     <CommandPrimitive.Item
-      value={`command:${command.id}`}
+      value={scope ? `command:${scope}:${command.id}` : `command:${command.id}`}
       onSelect={() => {
         if (command.page) {
           palette.push({
@@ -92,7 +105,7 @@ export function CommandGroupView({ group, query }: { group: PaletteCommandGroup;
   return (
     <PaletteGroup heading={group.heading}>
       {group.commands.map((command) => (
-        <CommandRow key={command.id} command={command} query={query} />
+        <CommandRow key={command.id} command={command} query={query} scope={group.id} />
       ))}
     </PaletteGroup>
   );

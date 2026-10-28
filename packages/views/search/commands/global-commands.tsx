@@ -100,14 +100,13 @@ export function useGlobalCommands(contexts: readonly CommandBarContext[]): Palet
             inbox.markAllRead();
             return;
           }
-          markAllRead.mutate(undefined, {
-            onError: (err) =>
-              toast.error(
-                err instanceof Error && err.message
-                  ? err.message
-                  : tInbox(($) => $.errors.mark_all_read_failed),
-              ),
-          });
+          markAllRead.mutateAsync(undefined).catch((err: unknown) =>
+            toast.error(
+              err instanceof Error && err.message
+                ? err.message
+                : tInbox(($) => $.errors.mark_all_read_failed),
+            ),
+          );
         },
       },
       {
@@ -120,14 +119,13 @@ export function useGlobalCommands(contexts: readonly CommandBarContext[]): Palet
             inbox.archiveAllRead();
             return;
           }
-          archiveAllRead.mutate(undefined, {
-            onError: (err) =>
-              toast.error(
-                err instanceof Error && err.message
-                  ? err.message
-                  : tInbox(($) => $.errors.archive_all_read_failed),
-              ),
-          });
+          archiveAllRead.mutateAsync(undefined).catch((err: unknown) =>
+            toast.error(
+              err instanceof Error && err.message
+                ? err.message
+                : tInbox(($) => $.errors.archive_all_read_failed),
+            ),
+          );
         },
       },
       {

@@ -323,10 +323,10 @@ export function IssueLabelsPage({ target, query }: { target: IssueTarget; query:
     if (lacking.length === 0 && single) {
       // Every target already has it: on a single issue the row reads as a
       // checked toggle, so selecting it removes the label.
-      detach.mutate(label.id, {
-        onSuccess: () => toast.success(t(($) => $.toast.label_removed, { name: label.name })),
-        onError: (err) => toast.error(err instanceof Error ? err.message : String(err)),
-      });
+      detach.mutateAsync(label.id).then(
+        () => toast.success(t(($) => $.toast.label_removed, { name: label.name })),
+        (err: unknown) => toast.error(err instanceof Error ? err.message : String(err)),
+      );
       return;
     }
     void Promise.allSettled(

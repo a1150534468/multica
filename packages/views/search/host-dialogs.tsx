@@ -58,11 +58,11 @@ function CancelRunDialog({
       showRunningNote={dialog.running}
       onConfirm={() => {
         onClose();
-        cancelRun.mutate(dialog.taskId, {
-          onSuccess: () => toast.success(tSearch(($) => $.toast.run_cancelled)),
-          onError: (e) =>
+        cancelRun.mutateAsync(dialog.taskId).then(
+          () => toast.success(tSearch(($) => $.toast.run_cancelled)),
+          (e: unknown) =>
             toast.error(e instanceof Error ? e.message : t(($) => $.execution_log.cancel_failed)),
-        });
+        );
       }}
     />
   );

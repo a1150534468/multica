@@ -81,12 +81,8 @@ export function ProjectStatusPage({ project, query }: { project: Project; query:
           value={`project-status:${status}`}
           onSelect={() => {
             palette.close();
-            updateProject.mutate(
-              { id: project.id, status },
-              {
-                onError: (err) =>
-                  toast.error(err instanceof Error && err.message ? err.message : t(($) => $.toast.update_failed)),
-              },
+            updateProject.mutateAsync({ id: project.id, status }).catch((err: unknown) =>
+              toast.error(err instanceof Error && err.message ? err.message : t(($) => $.toast.update_failed)),
             );
           }}
           className={ROW_CLASS}

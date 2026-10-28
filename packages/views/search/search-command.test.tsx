@@ -741,10 +741,10 @@ describe("SearchCommand", () => {
       expect(renderedHeadings()[0]).toContain("Current issue");
       expect(renderedHeadings()[0]).toContain("MUL-42");
       expect(renderedValues().slice(0, 4)).toEqual([
-        "command:issue-status",
-        "command:issue-assignee",
-        "command:issue-priority",
-        "command:issue-copy-link",
+        "command:context-issue:issue-status",
+        "command:context-issue:issue-assignee",
+        "command:context-issue:issue-priority",
+        "command:context-issue:issue-copy-link",
       ]);
       // The input stays a global search: no context chip inside it.
       expect(input().value).toBe("");
@@ -765,7 +765,7 @@ describe("SearchCommand", () => {
       renderSearch();
       await user.type(input(), "status");
 
-      await waitFor(() => expect(renderedValues()[0]).toBe("command:issue-status"));
+      await waitFor(() => expect(renderedValues()[0]).toBe("command:context-issue:issue-status"));
       fireEvent.keyDown(input(), { key: "Enter" });
       expect(screen.getByRole("navigation", { name: "Current menu" })).toHaveTextContent("MUL-42Change status");
     });
@@ -877,7 +877,7 @@ describe("SearchCommand", () => {
       });
       renderSearch();
 
-      expect(renderedValues()).not.toContain("command:issue-status");
+      expect(renderedValues()).not.toContain("command:context-issue:issue-status");
     });
   });
 
@@ -924,6 +924,48 @@ describe("SearchCommand", () => {
         assigneeId: "agent-lambda",
       });
       expect(api("batchUpdateIssues")).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("previewed issue inside a selection", () => {
+    const issues = [
+      makeIssue({ id: "issue-a", identifier: "MUL-1" }),
+      makeIssue({ id: "issue-b", identifier: "MUL-2" }),
+      makeIssue({ id: "issue-c", identifier: "MUL-3" }),
+    ];
+
+    beforeEach(() => {
+      registerContext({ kind: "issues", issues, clearSelection: vi.fn() });
+      // The preview opens after the selection, so its group renders first.
+      registerContext({ kind: "issue", issue: issues[0]! });
+    });
+
+    it("runs the selection's command when its row is highlighted, not the issue's", async () => {
+      api("batchUpdateIssues").mockResolvedValue({ updated: 3 });
+      renderSearch();
+
+      const values = renderedValues();
+      expect(new Set(values).size).toBe(values.length);
+      expect(renderedHeadings().slice(0, 2)).toEqual([
+        expect.stringContaining("Current issue"),
+        "3 selected issues",
+      ]);
+
+      const selectionRow = document.querySelector<HTMLElement>(
+        '[cmdk-item=""][data-value="command:context-issues:issue-priority"]',
+      )!;
+      fireEvent.pointerMove(selectionRow);
+      expect(selectedValue()).toBe("command:context-issues:issue-priority");
+      fireEvent.keyDown(input(), { key: "Enter" });
+
+      expect(screen.getByRole("navigation", { name: "Current menu" })).toHaveTextContent(
+        "3 selected issuesSet priority",
+      );
+      fireEvent.click(screen.getByText("Urgent"));
+      await waitFor(() =>
+        expect(api("batchUpdateIssues")).toHaveBeenCalledWith(["issue-a", "issue-b", "issue-c"], { priority: "urgent" }),
+      );
+      expect(api("updateIssue")).not.toHaveBeenCalled();
     });
   });
 

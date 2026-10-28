@@ -3,9 +3,12 @@
 import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import type { Issue, UpdateIssueRequest } from "@multica/core/types";
-import { useBatchUpdateIssues } from "@multica/core/issues/mutations";
+import { errorCode } from "@multica/core/api";
+import { useWorkspaceId } from "@multica/core/hooks";
+import { useIssueStatuses } from "@multica/core/issue-statuses/hooks";
+import { useBatchUpdateIssues, useUpdateIssue } from "@multica/core/issues/mutations";
 import { useModalStore } from "@multica/core/modals";
-import { useIssueActions } from "../issues/actions/use-issue-actions";
+import { runConfirmIntent } from "../issues/actions/run-confirm-gate";
 import { useT } from "../i18n";
 import type { IssueTarget } from "./types";
 
@@ -15,14 +18,21 @@ export function targetIssues(target: IssueTarget): Issue[] {
 
 /**
  * Field writes for an issue command, routed the way the matching on-page
- * control routes them: a single issue goes through `useIssueActions`, whose
- * run-confirm gate asks before handing work to an agent; a selection goes
- * through the batch toolbar's rules.
+ * control routes them: a single issue passes the run-confirm gate that asks
+ * before handing work to an agent; a selection follows the batch toolbar's
+ * rules.
+ *
+ * The palette closes, and unmounts this hook, before a write settles, so
+ * outcomes are handled on the returned promise: per-call `mutate` callbacks
+ * would be dropped with the component and a rejected write would roll back
+ * silently.
  */
 export function useIssueTargetWriter(target: IssueTarget) {
   const { t } = useT("issues");
+  const wsId = useWorkspaceId();
+  const { entryOf } = useIssueStatuses(wsId);
   const single = target.kind === "single" ? target.issue : null;
-  const actions = useIssueActions(single);
+  const updateIssue = useUpdateIssue();
   const batchUpdate = useBatchUpdateIssues();
   const openModal = useModalStore((s) => s.open);
   const issues = useMemo(() => targetIssues(target), [target]);
@@ -48,15 +58,35 @@ export function useIssueTargetWriter(target: IssueTarget) {
     [batchUpdate, issues, t, target.kind],
   );
 
+  const applySingle = useCallback(
+    (issue: Issue, updates: Partial<UpdateIssueRequest>) => {
+      const intent = runConfirmIntent(issue, updates, { entryOf });
+      if (intent) {
+        openModal("issue-run-confirm", intent);
+        return;
+      }
+      updateIssue.mutateAsync({ id: issue.id, ...updates }).catch((err: unknown) => {
+        toast.error(
+          errorCode(err) === "revision_conflict"
+            ? t(($) => $.revision.conflict)
+            : err instanceof Error && err.message
+              ? err.message
+              : t(($) => $.detail.update_failed),
+        );
+      });
+    },
+    [entryOf, openModal, t, updateIssue],
+  );
+
   const apply = useCallback(
     (updates: Partial<UpdateIssueRequest>) => {
-      if (target.kind === "single") {
-        actions.updateField(updates);
+      if (single) {
+        applySingle(single, updates);
         return;
       }
       void applyBatch(updates);
     },
-    [actions, applyBatch, target.kind],
+    [applyBatch, applySingle, single],
   );
 
   const assign = useCallback(
@@ -85,5 +115,5 @@ export function useIssueTargetWriter(target: IssueTarget) {
     [apply, issues, openModal, target.kind],
   );
 
-  return { issues, apply, assign, actions };
+  return { issues, apply, assign };
 }

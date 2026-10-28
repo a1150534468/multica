@@ -242,14 +242,13 @@ export function useIssueCommandGroup(
           keywords: ["subscribe", "watch", "notify", "订阅"],
           run: () => {
             if (!userId) return;
-            toggleSubscriber.mutate(
-              { userId, userType: "member", subscribed },
-              {
-                onSuccess: () =>
-                  toast.success(
-                    subscribed ? t(($) => $.toast.unsubscribed) : t(($) => $.toast.subscribed),
-                  ),
-              },
+            toggleSubscriber.mutateAsync({ userId, userType: "member", subscribed }).then(
+              () =>
+                toast.success(
+                  subscribed ? t(($) => $.toast.unsubscribed) : t(($) => $.toast.subscribed),
+                ),
+              (err: unknown) =>
+                toast.error(err instanceof Error && err.message ? err.message : t(($) => $.toast.update_failed)),
             );
           },
         },
