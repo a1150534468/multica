@@ -575,19 +575,26 @@ export function rollbackIssueChange(
 /**
  * Refresh the aggregate projections a single-entity patch cannot recompute:
  * assignee-grouped boards (regrouping is server logic), every Project Gantt
- * (schedule membership + row mirrors), and project metrics when the change
- * could shift per-project counts.
+ * (schedule membership + row mirrors), and project metrics plus per-project
+ * open-issue lists when the change could shift what a project counts as open.
  */
 export function invalidateIssueDerivatives(
   qc: QueryClient,
   wsId: string,
-  opts: { statusOrProjectChanged: boolean },
+  opts: {
+    statusOrProjectChanged: boolean;
+    /** Narrower than `statusOrProjectChanged` when the caller knows what moved. */
+    openMembershipChanged?: boolean;
+  },
 ) {
   qc.invalidateQueries({ queryKey: issueKeys.assigneeGroupsAll(wsId) });
   qc.invalidateQueries({ queryKey: issueKeys.myAssigneeGroupsAll(wsId) });
   qc.invalidateQueries({ queryKey: issueKeys.projectGanttAll(wsId) });
   if (opts.statusOrProjectChanged) {
     qc.invalidateQueries({ queryKey: projectKeys.all(wsId) });
+  }
+  if (opts.openMembershipChanged ?? opts.statusOrProjectChanged) {
+    qc.invalidateQueries({ queryKey: issueKeys.projectOpenAll(wsId) });
   }
 }
 

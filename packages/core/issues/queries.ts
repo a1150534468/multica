@@ -126,6 +126,11 @@ export const issueKeys = {
       projectId,
       assigneeTypes ?? null,
     ] as const,
+  /** All per-project open-issue lists — prefix for cross-project refresh. */
+  projectOpenAll: (wsId: string) => [...issueKeys.all(wsId), "project-open"] as const,
+  /** A project's unfinished issues (the sidebar's expanded project). */
+  projectOpen: (wsId: string, projectId: string) =>
+    [...issueKeys.projectOpenAll(wsId), projectId] as const,
   detail: (wsId: string, id: string) =>
     [...issueKeys.all(wsId), "detail", id] as const,
   /** Resolve a bare issue identifier (e.g. "MUL-123") to an issue. */
@@ -445,6 +450,18 @@ export function projectGanttIssuesOptions(
   return queryOptions({
     queryKey: issueKeys.projectGantt(wsId, projectId, assigneeTypes),
     queryFn: () => fetchProjectGanttIssues(projectId, assigneeTypes),
+  });
+}
+
+/**
+ * Every unfinished issue in a project — the same non-terminal predicate the
+ * project's `done_count` excludes, so the list matches its open count.
+ */
+export function projectOpenIssuesOptions(wsId: string, projectId: string) {
+  return queryOptions({
+    queryKey: issueKeys.projectOpen(wsId, projectId),
+    queryFn: async () =>
+      (await api.listIssues({ project_id: projectId, open_only: true })).issues,
   });
 }
 

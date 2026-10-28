@@ -214,10 +214,10 @@ function patchIssueSnapshot(
   qc.setQueryData<Issue>(issueKeys.detail(wsId, issueId), (old) =>
     old ? mergeIssuePatch(old, patch, orderRevision) : old,
   );
-  for (const [key, data] of issueArrayEntries(
-    qc,
-    issueKeys.projectGanttAll(wsId),
-  )) {
+  for (const [key, data] of [
+    ...issueArrayEntries(qc, issueKeys.projectGanttAll(wsId)),
+    ...issueArrayEntries(qc, issueKeys.projectOpenAll(wsId)),
+  ]) {
     qc.setQueryData<Issue[]>(
       key,
       data.map((issue) =>
@@ -251,7 +251,11 @@ function freshestCachedIssueRevision(
   for (const [, data] of tableRowEntries(qc, wsId)) {
     consider(data.rows.find((row) => row.issue.id === issueId)?.issue);
   }
-  for (const prefix of [issueKeys.childrenAll(wsId), issueKeys.projectGanttAll(wsId)]) {
+  for (const prefix of [
+    issueKeys.childrenAll(wsId),
+    issueKeys.projectGanttAll(wsId),
+    issueKeys.projectOpenAll(wsId),
+  ]) {
     for (const [, data] of issueArrayEntries(qc, prefix)) {
       consider(data.find((issue) => issue.id === issueId));
     }
@@ -301,7 +305,11 @@ function invalidateIssueOwnerProjectionsWhere(
       invalidateExact(key);
     }
   }
-  for (const prefix of [issueKeys.childrenAll(wsId), issueKeys.projectGanttAll(wsId)]) {
+  for (const prefix of [
+    issueKeys.childrenAll(wsId),
+    issueKeys.projectGanttAll(wsId),
+    issueKeys.projectOpenAll(wsId),
+  ]) {
     for (const [key, data] of issueArrayEntries(qc, prefix)) {
       if (data.some((issue) => issue.id === issueId && shouldInvalidate(issue))) {
         invalidateExact(key);
@@ -407,6 +415,7 @@ export function onIssueCreated(
   // because a fresh issue isn't necessarily scheduled yet; the active Gantt
   // page (if any) will refetch and pick it up if it qualifies.
   qc.invalidateQueries({ queryKey: issueKeys.projectGanttAll(wsId) });
+  qc.invalidateQueries({ queryKey: issueKeys.projectOpenAll(wsId) });
   if (issue.parent_issue_id) {
     qc.invalidateQueries({ queryKey: issueKeys.children(wsId, issue.parent_issue_id) });
     qc.invalidateQueries({ queryKey: issueKeys.childProgress(wsId) });
@@ -496,10 +505,44 @@ export function onIssueUpdated(
       issue.revision > current.revision,
   });
   invalidateStaleListKeys(qc, change.staleKeys);
+  const openEntries = issueArrayEntries(qc, issueKeys.projectOpenAll(wsId)).filter(
+    ([, data]) => data.some((c) => c.id === issue.id),
+  );
+  const openMembershipChanged =
+    changed.status ||
+    changed.project ||
+    openEntries.some(([, data]) =>
+      data.some(
+        (c) =>
+          c.id === issue.id &&
+          ((meta.statusChanged === undefined &&
+            issue.status !== undefined &&
+            issue.status !== c.status) ||
+            (meta.projectChanged === undefined &&
+              issue.project_id !== undefined &&
+              issue.project_id !== c.project_id)),
+      ),
+    );
   invalidateIssueDerivatives(qc, wsId, {
     statusOrProjectChanged:
       issue.status !== undefined || issue.project_id !== undefined,
+    openMembershipChanged,
   });
+  if (!openMembershipChanged) {
+    for (const [key, data] of openEntries) {
+      qc.setQueryData<Issue[]>(
+        key,
+        data.map((c) =>
+          c.id === issue.id &&
+          (issue.revision === undefined ||
+            c.revision === undefined ||
+            issue.revision > c.revision)
+            ? { ...c, ...issue }
+            : c,
+        ),
+      );
+    }
+  }
   // Group counts, branch membership and hierarchy are server-owned. Never
   // guess deltas from a partial branch; refetch the active Table queries.
   qc.invalidateQueries({ queryKey: issueKeys.tableAll(wsId) });

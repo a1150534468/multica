@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useStore } from "zustand";
 import { Bot, CircleUser, Layers, ListTodo, Plus, SquarePen } from "lucide-react";
@@ -15,18 +15,18 @@ import {
   issueViewContainerKey,
   useActiveIssueViewStore,
 } from "@multica/core/issue-views/active-view-store";
+import { issueDetailOptions, projectOpenIssuesOptions } from "@multica/core/issues/queries";
 import { projectListOptions } from "@multica/core/projects/queries";
+import { useProjectSidebarExpandStore } from "@multica/core/projects";
 import { useModalStore } from "@multica/core/modals";
 import { useShortcut } from "@multica/core/shortcuts";
 import type { IssueView } from "@multica/core/api/schemas";
 import type { Project } from "@multica/core/types";
 import { useNavigation } from "../../navigation";
-import { ProjectIcon } from "../../projects/components/project-icon";
 import { ShortcutKeycaps } from "../../common/shortcut-keycaps";
 import { useT } from "../../i18n";
 import {
   PanelBody,
-  PanelCount,
   PanelHeader,
   PanelLink,
   PanelList,
@@ -34,12 +34,20 @@ import {
   isPathWithin,
 } from "../panel-nav";
 import { PinnedSection, usePanelPins } from "./pinned-section";
+import { ProjectTreeItem } from "./project-tree-item";
 
 const EMPTY_PROJECTS: Project[] = [];
 const EMPTY_VIEWS: IssueView[] = [];
 const PROJECT_PREVIEW_LIMIT = 6;
 const OPEN_PROJECT_STATUSES = new Set<Project["status"]>(["planned", "in_progress", "paused"]);
 const WORKSPACE_VIEW_SCOPE = { scope_type: "workspace" } as const;
+
+/** The `{id}` of an `/issues/{id}` route — a UUID or an identifier like `MUL-123`. */
+function issueRouteSegment(pathname: string, issuesPath: string): string | null {
+  if (!pathname.startsWith(issuesPath + "/")) return null;
+  const segment = pathname.slice(issuesPath.length + 1).split("/")[0];
+  return segment ? decodeURIComponent(segment) : null;
+}
 
 function DraftDot() {
   const hasDraft = useIssueDraftStore((s) => s.hasDraft());
@@ -62,10 +70,38 @@ export function WorkPanel() {
     ...projectListOptions(wsId ?? ""),
     enabled: !!wsId,
   });
-  const openProjects = useMemo(
-    () => projects.filter((project) => OPEN_PROJECT_STATUSES.has(project.status)),
-    [projects],
-  );
+  // Cache read only: the detail page owns resolving the route's issue.
+  const issueSegment = issueRouteSegment(pathname, p.issues());
+  const { data: currentIssue } = useQuery({
+    ...issueDetailOptions(wsId ?? "", issueSegment ?? ""),
+    enabled: false,
+  });
+  const currentIssueId = issueSegment ? (currentIssue?.id ?? null) : null;
+  const revealProjectId = issueSegment ? (currentIssue?.project_id ?? null) : null;
+
+  const expandedIds = useProjectSidebarExpandStore((s) => s.expandedIds);
+  const setProjectExpanded = useProjectSidebarExpandStore((s) => s.setExpanded);
+  useEffect(() => {
+    if (revealProjectId) setProjectExpanded(revealProjectId, true);
+  }, [revealProjectId, setProjectExpanded]);
+
+  const shownProjects = useMemo(() => {
+    const preview = projects
+      .filter((project) => OPEN_PROJECT_STATUSES.has(project.status))
+      .slice(0, PROJECT_PREVIEW_LIMIT);
+    const revealed = projects.find((project) => project.id === revealProjectId);
+    return revealed && !preview.includes(revealed) ? [...preview, revealed] : preview;
+  }, [projects, revealProjectId]);
+  const { data: revealedIssues } = useQuery({
+    ...projectOpenIssuesOptions(wsId ?? "", revealProjectId ?? ""),
+    enabled: false,
+  });
+  // The tree row takes the highlight from "All issues" while it shows the issue.
+  const issueLitInTree =
+    !!revealProjectId &&
+    expandedIds.includes(revealProjectId) &&
+    shownProjects.some((project) => project.id === revealProjectId) &&
+    !!revealedIssues?.some((issue) => issue.id === currentIssueId);
   // Older backends without the views endpoint error here; the section hides.
   const { data: views = EMPTY_VIEWS } = useQuery({
     ...issueViewListOptions(wsId ?? "", WORKSPACE_VIEW_SCOPE),
@@ -121,7 +157,9 @@ export function WorkPanel() {
             label={t(($) => $.panels.work.all_issues)}
             active={
               plainRowsLit &&
-              (onIssues ? activeViewId === null : isPathWithin(pathname, p.issues()))
+              (onIssues
+                ? activeViewId === null
+                : !issueLitInTree && isPathWithin(pathname, p.issues()))
             }
             onNavigate={() => setActiveView(viewContainerKey, null)}
           />
@@ -160,19 +198,18 @@ export function WorkPanel() {
           }
         >
           <PanelList>
-            {openProjects.slice(0, PROJECT_PREVIEW_LIMIT).map((project) => {
-              const href = p.projectDetail(project.id);
-              return (
-                <PanelLink
+            {wsId &&
+              shownProjects.map((project) => (
+                <ProjectTreeItem
                   key={project.id}
-                  href={href}
-                  icon={<ProjectIcon project={project} size="sm" />}
-                  label={project.title}
-                  active={plainRowsLit && isPathWithin(pathname, href)}
-                  trailing={<PanelCount value={project.issue_count - project.done_count} />}
+                  wsId={wsId}
+                  project={project}
+                  active={plainRowsLit && isPathWithin(pathname, p.projectDetail(project.id))}
+                  expanded={expandedIds.includes(project.id)}
+                  onExpandedChange={(expanded) => setProjectExpanded(project.id, expanded)}
+                  activeIssueId={plainRowsLit ? currentIssueId : null}
                 />
-              );
-            })}
+              ))}
             <PanelLink
               href={p.projects()}
               icon={<span className="size-4" aria-hidden />}

@@ -1126,3 +1126,46 @@ describe("project gantt cache invalidation", () => {
     expectInvalidated(qc, issueKeys.projectGantt(WS_ID, PROJECT_ID));
   });
 });
+
+// The sidebar's expanded project lists its open issues from this cache; it
+// must follow titles in place and refetch when membership can change.
+describe("project open-issues cache", () => {
+  const PROJECT_ID = "project-1";
+  let qc: QueryClient;
+
+  beforeEach(() => {
+    qc = new QueryClient();
+    qc.setQueryData<Issue[]>(issueKeys.projectOpen(WS_ID, PROJECT_ID), [baseIssue]);
+  });
+
+  it("patches a renamed issue in place", () => {
+    qc.setQueryData<Issue[]>(issueKeys.projectOpen(WS_ID, PROJECT_ID), [
+      { ...baseIssue, revision: 1 },
+    ]);
+    onIssueUpdated(qc, WS_ID, { id: ISSUE_ID, title: "Renamed", revision: 2 });
+    expect(
+      qc.getQueryData<Issue[]>(issueKeys.projectOpen(WS_ID, PROJECT_ID))?.[0]?.title,
+    ).toBe("Renamed");
+    expect(
+      qc.getQueryState(issueKeys.projectOpen(WS_ID, PROJECT_ID))?.isInvalidated,
+    ).toBe(false);
+  });
+
+  it("refetches on the server's status flag", () => {
+    onIssueUpdated(qc, WS_ID, { id: ISSUE_ID, revision: 2 }, { statusChanged: true });
+    expectInvalidated(qc, issueKeys.projectOpen(WS_ID, PROJECT_ID));
+  });
+
+  it("refetches when an issue is created, moves status, or is deleted", () => {
+    onIssueCreated(qc, WS_ID, otherIssue);
+    expectInvalidated(qc, issueKeys.projectOpen(WS_ID, PROJECT_ID));
+
+    qc.setQueryData<Issue[]>(issueKeys.projectOpen(WS_ID, PROJECT_ID), [baseIssue]);
+    onIssueUpdated(qc, WS_ID, { id: ISSUE_ID, status: "done" });
+    expectInvalidated(qc, issueKeys.projectOpen(WS_ID, PROJECT_ID));
+
+    qc.setQueryData<Issue[]>(issueKeys.projectOpen(WS_ID, PROJECT_ID), [baseIssue]);
+    onIssueDeleted(qc, WS_ID, ISSUE_ID);
+    expectInvalidated(qc, issueKeys.projectOpen(WS_ID, PROJECT_ID));
+  });
+});

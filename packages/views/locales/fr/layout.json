@@ -83,7 +83,12 @@
       "views": "Vues",
       "new_project": "Nouveau projet",
       "all_projects_one": "Tous les projets ({{count}})",
-      "all_projects_other": "Tous les projets ({{count}})"
+      "all_projects_other": "Tous les projets ({{count}})",
+      "project_issues": "Tâches de {{name}}",
+      "project_issues_empty": "Aucune tâche ouverte",
+      "project_issues_error": "Impossible de charger les tâches",
+      "project_issues_view_all_one": "Tout voir ({{count}})",
+      "project_issues_view_all_other": "Tout voir ({{count}})"
     },
     "team": {
       "new_agent": "Nouvel agent",

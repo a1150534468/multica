@@ -82,7 +82,11 @@
       "all_issues": "すべてのタスク",
       "views": "ビュー",
       "new_project": "新規プロジェクト",
-      "all_projects_other": "すべてのプロジェクト（{{count}}）"
+      "all_projects_other": "すべてのプロジェクト（{{count}}）",
+      "project_issues": "{{name}} のタスク",
+      "project_issues_empty": "未完了のタスクはありません",
+      "project_issues_error": "タスクを読み込めませんでした",
+      "project_issues_view_all_other": "すべて表示（{{count}}）"
     },
     "team": {
       "new_agent": "新規エージェント",
