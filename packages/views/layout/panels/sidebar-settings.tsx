@@ -5,8 +5,8 @@ import { cn } from "@multica/ui/lib/utils";
 import { Button } from "@multica/ui/components/ui/button";
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@multica/ui/components/ui/popover";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@multica/ui/components/ui/select";
+import { Checkbox } from "@multica/ui/components/ui/checkbox";
 import { Switch } from "@multica/ui/components/ui/switch";
-import { Toggle } from "@multica/ui/components/ui/toggle";
 import { useIssueStatuses } from "@multica/core/issue-statuses/hooks";
 import { shownSidebarStatuses } from "@multica/core/issues/sidebar-list";
 import {
@@ -25,8 +25,6 @@ import { useProjectStatusLabels } from "../../projects/components/labels";
 import { useT } from "../../i18n";
 import { TREE_ROW_BUTTON_CLASS } from "./sidebar-tree";
 
-const CHIP_CLASS =
-  "h-6 max-w-40 gap-1.5 rounded-md px-2 text-caption text-muted-foreground hover:bg-muted/60 aria-pressed:border-transparent aria-pressed:bg-accent aria-pressed:text-accent-foreground aria-pressed:hover:bg-accent/80";
 
 const ISSUE_SORTS: { value: SidebarIssueSort; label: "sort_updated" | "sort_created" | "sort_priority" | "sort_status" | "sort_title" | "sort_due_date" }[] = [
   { value: "updated_at", label: "sort_updated" },
@@ -64,6 +62,28 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="text-caption font-medium text-muted-foreground">{label}</span>
       {children}
     </div>
+  );
+}
+
+function CheckOption({
+  checked,
+  onChange,
+  icon,
+  label,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <label className="flex h-7 min-w-0 cursor-pointer items-center gap-2 rounded-md px-1.5 transition-colors hover:bg-surface-hover">
+      <Checkbox checked={checked} onCheckedChange={(next) => onChange(next === true)} />
+      <span className={cn("flex shrink-0 transition-opacity", !checked && "opacity-50")}>{icon}</span>
+      <span className={cn("truncate text-caption transition-colors", checked ? "text-foreground" : "text-muted-foreground")}>
+        {label}
+      </span>
+    </label>
   );
 }
 
@@ -140,25 +160,23 @@ export function IssueDisplaySettings({ wsId, className }: { wsId: string; classN
         </div>
         <div>
           <span className="text-caption font-medium text-muted-foreground">{t(($) => $.panels.work.settings_status)}</span>
-          <div className="mt-2 flex flex-wrap gap-1">
+          <div className="-mx-1.5 mt-1 grid grid-cols-2 gap-x-1">
             {statuses.map((status) => (
-              <Toggle
+              <CheckOption
                 key={status.key}
-                size="sm"
-                variant="outline"
-                pressed={shown.has(status.key)}
-                onPressedChange={(pressed) => toggleStatus(status.key, pressed)}
-                className={CHIP_CLASS}
-              >
-                <StatusIcon
-                  status={status.key}
-                  category={status.category}
-                  color={statusCatalog.colorOf(status.key)}
-                  icon={statusCatalog.iconOf(status.key)}
-                  className="size-3 shrink-0"
-                />
-                <span className="truncate">{statusCatalog.labelOf(status.key)}</span>
-              </Toggle>
+                checked={shown.has(status.key)}
+                onChange={(checked) => toggleStatus(status.key, checked)}
+                label={statusCatalog.labelOf(status.key)}
+                icon={
+                  <StatusIcon
+                    status={status.key}
+                    category={status.category}
+                    color={statusCatalog.colorOf(status.key)}
+                    icon={statusCatalog.iconOf(status.key)}
+                    className="size-3.5"
+                  />
+                }
+              />
             ))}
           </div>
         </div>
@@ -249,19 +267,15 @@ export function ProjectsSectionSettings({ className }: { className?: string }) {
         </Field>
         <div>
           <span className="text-caption font-medium text-muted-foreground">{t(($) => $.panels.work.projects_show)}</span>
-          <div className="mt-2 flex flex-wrap gap-1">
+          <div className="-mx-1.5 mt-1 grid grid-cols-2 gap-x-1">
             {PROJECT_STATUS_ORDER.map((status) => (
-              <Toggle
+              <CheckOption
                 key={status}
-                size="sm"
-                variant="outline"
-                pressed={settings.statuses.includes(status)}
-                onPressedChange={(pressed) => toggleStatus(status, pressed)}
-                className={CHIP_CLASS}
-              >
-                <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", PROJECT_STATUS_CONFIG[status].dotColor)} />
-                <span className="truncate">{statusLabels[status]}</span>
-              </Toggle>
+                checked={settings.statuses.includes(status)}
+                onChange={(checked) => toggleStatus(status, checked)}
+                label={statusLabels[status]}
+                icon={<span aria-hidden className={cn("m-1 size-1.5 rounded-full", PROJECT_STATUS_CONFIG[status].dotColor)} />}
+              />
             ))}
           </div>
         </div>
