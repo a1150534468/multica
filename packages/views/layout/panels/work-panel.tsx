@@ -44,7 +44,6 @@ export function WorkPanel() {
   const wsId = useCurrentWorkspace()?.id;
   const userId = useAuthStore((s) => s.user?.id);
   const createIssueShortcut = useShortcut("createIssue");
-  const pins = usePanelPins(wsId, userId, pathname);
 
   const { data: projects = EMPTY_PROJECTS } = useQuery({
     ...projectListOptions(wsId ?? ""),
@@ -57,7 +56,11 @@ export function WorkPanel() {
     enabled: false,
   });
   const currentIssueId = issueSegment ? (currentIssue?.id ?? null) : null;
-  const revealProjectId = issueSegment ? (currentIssue?.project_id ?? null) : null;
+  const pins = usePanelPins(wsId, userId, pathname, currentIssueId);
+  // A lit pin already marks the issue; opening its project would only push
+  // the rest of the panel down.
+  const revealProjectId =
+    issueSegment && !pins.isActivePinnedRoute ? (currentIssue?.project_id ?? null) : null;
 
   const setExpanded = useSidebarTreeStore((s) => s.setExpanded);
   useEffect(() => {
@@ -106,7 +109,7 @@ export function WorkPanel() {
           />
         )}
 
-        {wsId && <PinnedSection pins={pins} wsId={wsId} pathname={pathname} />}
+        {wsId && <PinnedSection pins={pins} wsId={wsId} />}
 
         {wsId && (
           <ProjectsSection

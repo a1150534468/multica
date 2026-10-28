@@ -226,6 +226,35 @@ export function SidebarIssueList({
 
 type IssueAgentState = { running: boolean; agentIds: string[] } | null;
 
+/** The agents running on an issue, or queued for it when none is running yet. */
+export function useIssueAgentState(wsId: string, issueId: string): IssueAgentState {
+  const select = useCallback(
+    (snapshot: AgentTask[]): IssueAgentState => {
+      const { running, queued } = selectIssueTasks(snapshot, issueId);
+      const tasks = running.length > 0 ? running : queued;
+      if (tasks.length === 0) return null;
+      return { running: running.length > 0, agentIds: [...new Set(tasks.map((task) => task.agent_id))] };
+    },
+    [issueId],
+  );
+  const { data = null } = useQuery({ ...agentTaskSnapshotOptions(wsId), select });
+  return data;
+}
+
+export function IssueAgentBadge({ agents }: { agents: NonNullable<IssueAgentState> }) {
+  const { t } = useT("issues");
+  return (
+    <>
+      <AgentAvatarStack agentIds={agents.agentIds} size="xs" max={2} opacity={agents.running ? "full" : "half"} />
+      <span className="sr-only">
+        {agents.running
+          ? t(($) => $.agent_activity.status_running)
+          : t(($) => $.agent_activity.status_queued)}
+      </span>
+    </>
+  );
+}
+
 /** The title shimmers while an agent runs on the issue; queued agents show dimmed. */
 const SidebarIssueRow = memo(function SidebarIssueRow({
   wsId,
@@ -244,17 +273,7 @@ const SidebarIssueRow = memo(function SidebarIssueRow({
   statusIcon: string | null;
   onKeyDown: (event: React.KeyboardEvent) => void;
 }) {
-  const { t } = useT("issues");
-  const select = useCallback(
-    (snapshot: AgentTask[]): IssueAgentState => {
-      const { running, queued } = selectIssueTasks(snapshot, issue.id);
-      const tasks = running.length > 0 ? running : queued;
-      if (tasks.length === 0) return null;
-      return { running: running.length > 0, agentIds: [...new Set(tasks.map((task) => task.agent_id))] };
-    },
-    [issue.id],
-  );
-  const { data: agents = null } = useQuery({ ...agentTaskSnapshotOptions(wsId), select });
+  const agents = useIssueAgentState(wsId, issue.id);
 
   return (
     <AppLink
@@ -274,16 +293,7 @@ const SidebarIssueRow = memo(function SidebarIssueRow({
       <ShimmerText active={!!agents?.running} className="min-w-0 flex-1 truncate">
         {issue.title}
       </ShimmerText>
-      {agents && (
-        <>
-          <AgentAvatarStack agentIds={agents.agentIds} size="xs" max={2} opacity={agents.running ? "full" : "half"} />
-          <span className="sr-only">
-            {agents.running
-              ? t(($) => $.agent_activity.status_running)
-              : t(($) => $.agent_activity.status_queued)}
-          </span>
-        </>
-      )}
+      {agents && <IssueAgentBadge agents={agents} />}
     </AppLink>
   );
 });

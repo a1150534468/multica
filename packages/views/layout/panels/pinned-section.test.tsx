@@ -76,10 +76,10 @@ const pin = (n: number): PinnedItem => ({
 });
 
 let activePinnedRoute = false;
-function Harness({ pathname }: { pathname: string }) {
-  const pins = usePanelPins("ws-1", "user-1", pathname);
+function Harness({ pathname, currentIssueId = null }: { pathname: string; currentIssueId?: string | null }) {
+  const pins = usePanelPins("ws-1", "user-1", pathname, currentIssueId);
   activePinnedRoute = pins.isActivePinnedRoute;
-  return <PinnedSection pins={pins} wsId="ws-1" pathname={pathname} />;
+  return <PinnedSection pins={pins} wsId="ws-1" />;
 }
 
 beforeEach(() => {
@@ -109,7 +109,8 @@ describe("PinnedSection", () => {
       data: { identifier: "MUL-123", title: "Keep this pin", status: "todo" },
       error: null,
     };
-    renderWithI18n(<Harness pathname="/acme/issues/issue-1" />);
+    // The issue route rewrites the pin's UUID URL to the identifier form.
+    renderWithI18n(<Harness pathname="/acme/issues/MUL-123" currentIssueId="issue-1" />);
     const row = (await screen.findByText("Keep this pin")).closest("a");
     expect(row).toHaveAttribute("aria-current", "page");
     expect(screen.queryByText("MUL-123 Keep this pin")).toBeNull();
@@ -124,7 +125,7 @@ describe("PinnedSection", () => {
       data: { identifier: "MUL-1", title: "Pinned issue", status: "todo" },
       error: null,
     };
-    renderWithI18n(<Harness pathname="/acme/issues/issue-6" />);
+    renderWithI18n(<Harness pathname="/acme/issues/MUL-6" currentIssueId="issue-6" />);
     const lastPin = () => document.querySelector('a[href="/acme/issues/issue-6"]');
 
     expect(lastPin()).toBeNull();

@@ -15,6 +15,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { X } from "@multica/ui/icons";
 import { cn } from "@multica/ui/lib/utils";
 import { TooltipHint } from "@multica/ui/components/common/tooltip-hint";
+import { ShimmerText } from "@multica/ui/components/common/shimmer-text";
 import { ApiError } from "@multica/core/api";
 import { useIssueStatuses } from "@multica/core/issue-statuses/hooks";
 import { issueStatusCategory } from "@multica/core/issues";
@@ -28,7 +29,8 @@ import { AppLink } from "../../navigation";
 import { StatusIcon } from "../../issues/components/status-icon";
 import { ProjectIcon } from "../../projects/components/project-icon";
 import { useT } from "../../i18n";
-import { PANEL_ROW_CLASS, PanelList, PanelSection, panelRowStateClass } from "../panel-nav";
+import { PANEL_ROW_CLASS, PanelList, PanelSection, isPathWithin, panelRowStateClass } from "../panel-nav";
+import { IssueAgentBadge, useIssueAgentState } from "./sidebar-tree";
 
 // Stable empty default: an inline `= []` on useQuery is a new reference every
 // render while the query is disabled, which re-fires the sync effect below.
@@ -43,8 +45,16 @@ function pinHref(p: WorkspacePaths, pin: PinnedItem): string {
  * Pin list state for the Issues panel. Lifted out of the section so the
  * panel can keep its plain rows unlit while a pinned item is the page on
  * screen.
+ *
+ * An issue pin matches by id, not by path: the issue route rewrites its UUID
+ * URL to the `MUL-123` form, which a pin's href never equals.
  */
-export function usePanelPins(wsId: string | undefined, userId: string | undefined, pathname: string) {
+export function usePanelPins(
+  wsId: string | undefined,
+  userId: string | undefined,
+  pathname: string,
+  currentIssueId: string | null,
+) {
   const p = useWorkspacePaths();
   const { data: allPins = EMPTY_PINS } = useQuery({
     ...pinListOptions(wsId ?? "", userId ?? ""),
@@ -73,13 +83,18 @@ export function usePanelPins(wsId: string | undefined, userId: string | undefine
   const visible = localPinnedWsId === (wsId ?? null) ? localPinned : EMPTY_PINS;
   const expanded = expandedWsId === (wsId ?? null);
   const displayed = expanded ? visible : visible.slice(0, PINNED_PREVIEW_LIMIT);
-  const isActivePinnedRoute = displayed.some((pin) => pathname === pinHref(p, pin));
+  const isPinActive = (pin: PinnedItem) =>
+    pin.item_type === "issue"
+      ? pin.item_id === currentIssueId
+      : isPathWithin(pathname, pinHref(p, pin));
+  const isActivePinnedRoute = displayed.some(isPinActive);
 
   return {
     visible,
     displayed,
     expanded,
     isActivePinnedRoute,
+    isPinActive,
     setExpanded: (next: boolean) => setExpandedWsId(next ? wsId ?? null : null),
     setLocalPinned,
     isDraggingRef,
@@ -89,21 +104,13 @@ export function usePanelPins(wsId: string | undefined, userId: string | undefine
 
 type PanelPins = ReturnType<typeof usePanelPins>;
 
-export function PinnedSection({
-  pins,
-  wsId,
-  pathname,
-}: {
-  pins: PanelPins;
-  wsId: string;
-  pathname: string;
-}) {
+export function PinnedSection({ pins, wsId }: { pins: PanelPins; wsId: string }) {
   const { t } = useT("layout");
   const p = useWorkspacePaths();
   const deletePin = useDeletePin();
   const reorderPins = useReorderPins();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
-  const { visible, displayed, expanded, setExpanded, setLocalPinned, isDraggingRef, viewPins } = pins;
+  const { visible, displayed, expanded, setExpanded, setLocalPinned, isDraggingRef, viewPins, isPinActive } = pins;
 
   const handleDragStart = useCallback(() => {
     isDraggingRef.current = true;
@@ -135,7 +142,7 @@ export function PinnedSection({
                 key={pin.id}
                 pin={pin}
                 href={pinHref(p, pin)}
-                pathname={pathname}
+                active={isPinActive(pin)}
                 onUnpin={() => deletePin.mutate({ itemType: pin.item_type, itemId: pin.item_id })}
                 wsId={wsId}
               />
@@ -166,6 +173,8 @@ function SortablePinItem({
   label,
   iconNode,
   active,
+  running = false,
+  trailing,
   onNavigate,
 }: {
   pin: PinnedItem;
@@ -174,6 +183,9 @@ function SortablePinItem({
   label: string;
   iconNode: React.ReactNode;
   active: boolean;
+  /** Shimmers the label while an agent works on the pinned issue. */
+  running?: boolean;
+  trailing?: React.ReactNode;
   /** Runs on a real click (not a drag-release) before navigation. */
   onNavigate?: () => void;
 }) {
@@ -209,7 +221,10 @@ function SortablePinItem({
         className={cn(PANEL_ROW_CLASS, panelRowStateClass(active), "pr-8", isDragging && "pointer-events-none")}
       >
         {iconNode}
-        <span className="min-w-0 flex-1 truncate">{label}</span>
+        <ShimmerText active={running} className="min-w-0 flex-1 truncate">
+          {label}
+        </ShimmerText>
+        {trailing}
       </AppLink>
       <TooltipHint label={t(($) => $.sidebar.unpin_tooltip)}>
         <button
@@ -242,17 +257,18 @@ function SortablePinItem({
 function PinRow({
   pin,
   href,
-  pathname,
+  active,
   onUnpin,
   wsId,
 }: {
   pin: PinnedItem;
   href: string;
-  pathname: string;
+  active: boolean;
   onUnpin: () => void;
   wsId: string;
 }) {
   const isIssue = pin.item_type === "issue";
+  const agents = useIssueAgentState(wsId, isIssue ? pin.item_id : "");
   const statusCatalog = useIssueStatuses(wsId);
   const issueQuery = useQuery({ ...issueDetailOptions(wsId, pin.item_id), enabled: isIssue });
   const projectQuery = useQuery({
@@ -279,7 +295,9 @@ function PinRow({
         href={href}
         onUnpin={onUnpin}
         label={issue.title}
-        active={pathname === href}
+        active={active}
+        running={!!agents?.running}
+        trailing={agents && <IssueAgentBadge agents={agents} />}
         iconNode={
           <StatusIcon
             status={issue.status}
@@ -302,7 +320,7 @@ function PinRow({
       href={href}
       onUnpin={onUnpin}
       label={project.title}
-      active={pathname === href}
+      active={active}
       iconNode={<ProjectIcon project={project} size="sm" />}
     />
   );
