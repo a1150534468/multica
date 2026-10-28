@@ -209,7 +209,7 @@ function SortablePinItem({
   return (
     <li
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
       className={cn("group/pin relative", isDragging && "opacity-30")}
       {...attributes}
       {...listeners}
