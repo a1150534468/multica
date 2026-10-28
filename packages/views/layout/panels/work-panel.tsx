@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { SquarePen } from "@multica/ui/icons";
 import { IconButton } from "@multica/ui/components/common/icon-button";
@@ -56,7 +56,23 @@ export function WorkPanel() {
     enabled: false,
   });
   const currentIssueId = issueSegment ? (currentIssue?.id ?? null) : null;
-  const pins = usePanelPins(wsId, userId, pathname, currentIssueId);
+  // An issue can sit in Pinned and in the tree at once. The row that was
+  // clicked keeps the highlight; arriving any other way (search, a link, a
+  // shortcut) lights the pin.
+  const [clickedIssue, setClickedIssue] = useState<{ segment: string; fromPins: boolean } | null>(null);
+  const treeClaimsIssue =
+    !!clickedIssue &&
+    !clickedIssue.fromPins &&
+    !!currentIssue &&
+    (clickedIssue.segment === currentIssue.id || clickedIssue.segment === currentIssue.identifier);
+  const pins = usePanelPins(wsId, userId, pathname, treeClaimsIssue ? null : currentIssueId);
+  const rememberClickedIssue = (event: React.MouseEvent) => {
+    const link = (event.target as HTMLElement).closest("a[href]");
+    if (!link) return;
+    const path = new URL(link.getAttribute("href") ?? "", window.location.href).pathname;
+    const segment = issueRouteSegment(path, p.issues());
+    setClickedIssue(segment ? { segment, fromPins: !!link.closest("[data-pinned-section]") } : null);
+  };
   // A lit pin already marks the issue; opening its project would only push
   // the rest of the panel down.
   const revealProjectId =
@@ -96,7 +112,7 @@ export function WorkPanel() {
           </span>
         </IconButton>
       </PanelHeader>
-      <PanelBody>
+      <PanelBody onClickCapture={rememberClickedIssue}>
         {wsId && (
           <ViewsSection
             wsId={wsId}
@@ -109,7 +125,11 @@ export function WorkPanel() {
           />
         )}
 
-        {wsId && <PinnedSection pins={pins} wsId={wsId} />}
+        {wsId && (
+          <div data-pinned-section className="contents">
+            <PinnedSection pins={pins} wsId={wsId} />
+          </div>
+        )}
 
         {wsId && (
           <ProjectsSection

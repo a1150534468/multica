@@ -59,13 +59,20 @@ export function PanelHeader({
   );
 }
 
-export function PanelBody({ children }: { children: React.ReactNode }) {
+export function PanelBody({
+  children,
+  onClickCapture,
+}: {
+  children: React.ReactNode;
+  onClickCapture?: React.MouseEventHandler<HTMLDivElement>;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const fadeStyle = useScrollFade(ref, 24);
   return (
     <div
       ref={ref}
       style={fadeStyle}
+      onClickCapture={onClickCapture}
       className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-4"
     >
       {children}
