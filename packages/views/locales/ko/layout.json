@@ -86,7 +86,7 @@
       "project_issues": "{{name}}의 태스크",
       "project_issues_empty": "태스크가 없습니다",
       "project_issues_error": "태스크를 불러오지 못했습니다",
-      "issue_settings": "태스크 표시",
+      "project_issues_settings": "프로젝트 태스크",
       "settings_status": "상태",
       "settings_assignee": "담당자",
       "assignee_anyone": "모두",

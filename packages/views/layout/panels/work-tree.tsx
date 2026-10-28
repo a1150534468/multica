@@ -26,11 +26,10 @@ import type { ListIssuesParams, ListIssuesResponse, Project } from "@multica/cor
 import { ProjectIcon } from "../../projects/components/project-icon";
 import { useT } from "../../i18n";
 import { PanelCount, PanelLink, PanelList, PanelSection, isPathWithin } from "../panel-nav";
-import { IssueDisplaySettings, ProjectsSectionSettings } from "./sidebar-settings";
+import { ProjectsSectionSettings } from "./sidebar-settings";
 import { SidebarIssueList, TreeRow } from "./sidebar-tree";
 
 const DRAG_MODIFIERS = [restrictToVerticalAxis, restrictToFirstScrollableAncestor];
-const HOVER_REVEAL = "opacity-0 group-hover/row:opacity-100 [@media(pointer:coarse)]:opacity-100";
 
 function useExpanded(key: string) {
   const expanded = useSidebarTreeStore((s) => s.expanded.includes(key));
@@ -111,7 +110,7 @@ export function ProjectsSection({
       onCollapsedChange={setCollapsed}
       action={
         <>
-          <ProjectsSectionSettings className="opacity-0 group-hover/section:opacity-100 group-focus-within/section:opacity-100 [@media(pointer:coarse)]:opacity-100" />
+          <ProjectsSectionSettings wsId={wsId} className="opacity-0 group-hover/section:opacity-100 group-focus-within/section:opacity-100 [@media(pointer:coarse)]:opacity-100" />
           <IconButton
             label={t(($) => $.panels.work.new_project)}
             size="icon-xs"
@@ -214,13 +213,7 @@ function ProjectTreeItem({
           wasDragged.current = false;
           event.preventDefault();
         }}
-        trailing={
-          expanded ? (
-            <IssueDisplaySettings wsId={wsId} className={HOVER_REVEAL} />
-          ) : showCount ? (
-            <PanelCount value={project.issue_count - project.done_count} />
-          ) : null
-        }
+        trailing={showCount ? <PanelCount value={project.issue_count - project.done_count} /> : null}
       />
       {expanded && (
         <SidebarIssueList

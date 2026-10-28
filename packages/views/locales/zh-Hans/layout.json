@@ -86,7 +86,7 @@
       "project_issues": "{{name}} 的任务",
       "project_issues_empty": "没有任务",
       "project_issues_error": "无法加载任务",
-      "issue_settings": "任务显示",
+      "project_issues_settings": "项目中的任务",
       "settings_status": "状态",
       "settings_assignee": "负责人",
       "assignee_anyone": "所有人",

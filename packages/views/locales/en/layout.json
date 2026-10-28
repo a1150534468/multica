@@ -87,7 +87,7 @@
       "project_issues": "Issues in {{name}}",
       "project_issues_empty": "No issues",
       "project_issues_error": "Couldn't load issues",
-      "issue_settings": "Issue display",
+      "project_issues_settings": "Issues in projects",
       "settings_status": "Status",
       "settings_assignee": "Assignee",
       "assignee_anyone": "Anyone",

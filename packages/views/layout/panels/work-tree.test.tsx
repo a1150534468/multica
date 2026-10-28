@@ -82,15 +82,20 @@ function renderSection() {
 }
 
 describe("ProjectsSection", () => {
-  it("swaps a project's count for the issue settings once it expands", () => {
+  it("expands a project in place, keeping its count", () => {
     renderSection();
     expect(screen.getAllByText("3")).toHaveLength(3);
-    expect(screen.queryByRole("button", { name: "Issue display" })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Issues in Mobile" }));
     expect(useSidebarTreeStore.getState().expanded).toEqual(["project:p2"]);
-    expect(screen.getAllByText("3")).toHaveLength(2);
-    expect(screen.getByRole("button", { name: "Issue display" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Issues in Mobile" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getAllByText("3")).toHaveLength(3);
+  });
+
+  it("keeps display settings on the section header only", () => {
+    renderSection();
+    fireEvent.click(screen.getByRole("button", { name: "Issues in Mobile" }));
+    expect(screen.getAllByRole("button", { name: "Project display" })).toHaveLength(1);
   });
 
   it("drops into a manual order, keeping hidden projects after the shown ones", () => {

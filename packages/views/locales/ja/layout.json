@@ -86,7 +86,7 @@
       "project_issues": "{{name}} のタスク",
       "project_issues_empty": "タスクはありません",
       "project_issues_error": "タスクを読み込めませんでした",
-      "issue_settings": "タスクの表示",
+      "project_issues_settings": "プロジェクトのタスク",
       "settings_status": "ステータス",
       "settings_assignee": "担当者",
       "assignee_anyone": "全員",

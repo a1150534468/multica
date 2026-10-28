@@ -86,7 +86,7 @@
       "project_issues": "{{name}} 的任務",
       "project_issues_empty": "沒有任務",
       "project_issues_error": "無法載入任務",
-      "issue_settings": "任務顯示",
+      "project_issues_settings": "專案中的任務",
       "settings_status": "狀態",
       "settings_assignee": "負責人",
       "assignee_anyone": "所有人",

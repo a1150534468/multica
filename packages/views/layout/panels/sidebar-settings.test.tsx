@@ -7,7 +7,7 @@ import {
   useSidebarTreeStore,
 } from "@multica/core/issues/stores/sidebar-tree-store";
 import { renderWithI18n } from "../../test/i18n";
-import { IssueDisplaySettings, ProjectsSectionSettings } from "./sidebar-settings";
+import { ProjectsSectionSettings } from "./sidebar-settings";
 
 vi.mock("@multica/core/issue-statuses/hooks", () => ({
   useIssueStatuses: () =>
@@ -41,29 +41,43 @@ beforeEach(() => {
   });
 });
 
-describe("IssueDisplaySettings", () => {
-  it("shows each status as checked or not, and hides one when unchecked", () => {
-    renderWithI18n(<IssueDisplaySettings wsId="ws-1" />);
-    fireEvent.click(screen.getByRole("button", { name: "Issue display" }));
+const chip = (name: string) => screen.getByRole("button", { name });
 
-    expect(screen.getByRole("checkbox", { name: "Todo" })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: "Done" })).not.toBeChecked();
+describe("ProjectsSectionSettings", () => {
+  it("covers both the project list and every project's issues", () => {
+    renderWithI18n(<ProjectsSectionSettings wsId="ws-1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Project display" }));
 
-    fireEvent.click(screen.getByRole("checkbox", { name: "Todo" }));
+    expect(screen.getByRole("heading", { name: "Projects" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Issues in projects" })).toBeInTheDocument();
+  });
+
+  it("toggles issue statuses from their chips", () => {
+    renderWithI18n(<ProjectsSectionSettings wsId="ws-1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Project display" }));
+
+    expect(chip("Todo")).toHaveAttribute("aria-pressed", "true");
+    expect(chip("Done")).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(chip("Todo"));
     const hidden = useSidebarTreeStore.getState().issueSettings.hiddenStatuses;
     expect(hidden).toContain("todo");
     expect(hidden).toContain("done");
-    expect(screen.getByRole("checkbox", { name: "Todo" })).not.toBeChecked();
+    expect(chip("Todo")).toHaveAttribute("aria-pressed", "false");
   });
-});
 
-describe("ProjectsSectionSettings", () => {
-  it("toggles a project status from its checkbox", () => {
-    renderWithI18n(<ProjectsSectionSettings />);
+  it("toggles a project status and resets everything at once", () => {
+    renderWithI18n(<ProjectsSectionSettings wsId="ws-1" />);
     fireEvent.click(screen.getByRole("button", { name: "Project display" }));
 
-    expect(screen.getByRole("checkbox", { name: "Completed" })).not.toBeChecked();
-    fireEvent.click(screen.getByRole("checkbox", { name: "Completed" }));
+    expect(screen.queryByRole("button", { name: "Reset" })).toBeNull();
+    fireEvent.click(chip("Completed"));
+    fireEvent.click(chip("Todo"));
     expect(useSidebarTreeStore.getState().projectSettings.statuses).toContain("completed");
+
+    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    const state = useSidebarTreeStore.getState();
+    expect(state.projectSettings).toEqual(DEFAULT_SIDEBAR_PROJECT_SETTINGS);
+    expect(state.issueSettings).toEqual(DEFAULT_SIDEBAR_ISSUE_SETTINGS);
   });
 });
