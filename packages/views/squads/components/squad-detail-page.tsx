@@ -62,8 +62,25 @@ import { toast } from "sonner";
 import type { Squad, SquadMember, SquadMemberStatus, SquadMemberStatusValue, Agent, MemberWithUser } from "@multica/core/types";
 import { useT } from "../../i18n";
 import { matchesPinyin } from "../../editor/extensions/pinyin-match";
+import { TeamRedirect, teamHrefForSquad, useTeamPageEnabled } from "../../team/redirects";
 
-export function SquadDetailPage({
+type SquadDetailPageProps = {
+  squadId?: string;
+  /** Hosted inside another page (Team setup): no breadcrumb header. */
+  embedded?: boolean;
+  onArchived?: () => void;
+};
+
+export function SquadDetailPage(props: SquadDetailPageProps = {}) {
+  const p = useWorkspacePaths();
+  const { pathname } = useNavigation();
+  const squadId = props.squadId ?? pathname.split("/").pop() ?? "";
+  const teamPageEnabled = useTeamPageEnabled();
+  if (teamPageEnabled && !props.embedded && squadId) return <TeamRedirect to={teamHrefForSquad(p.team(), squadId)} />;
+  return <SquadDetailPageContent {...props} />;
+}
+
+function SquadDetailPageContent({
   squadId: squadIdProp,
   embedded = false,
   onArchived,

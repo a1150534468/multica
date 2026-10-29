@@ -66,12 +66,20 @@ import { AgentOverviewPane, type DetailTab } from "./agent-overview-pane";
 import { useAgentUpdate } from "./use-agent-update";
 import { ExpandableDescription } from "../../common/expandable-description";
 import { useT, useTimeAgo } from "../../i18n";
+import { TeamRedirect, teamHrefForAgent, useTeamPageEnabled } from "../../team/redirects";
 
 interface AgentDetailPageProps {
   agentId: string;
 }
 
 export function AgentDetailPage({ agentId }: AgentDetailPageProps) {
+  const paths = useWorkspacePaths();
+  const { searchParams } = useNavigation();
+  if (useTeamPageEnabled()) return <TeamRedirect to={teamHrefForAgent(paths.team(), agentId, searchParams)} />;
+  return <AgentDetailPageContent agentId={agentId} />;
+}
+
+function AgentDetailPageContent({ agentId }: AgentDetailPageProps) {
   const { t } = useT("agents");
   const wsId = useWorkspaceId();
   const paths = useWorkspacePaths();
