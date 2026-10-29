@@ -12,6 +12,7 @@ import {
   advancedFilterFromSimple,
   DUE_DATE_FILTERS,
   EMPTY_SIMPLE_FILTER_FIELDS,
+  foldPropertyFiltersIntoTree,
   ISSUE_RELATION_FILTERS,
   NEGATABLE_FILTER_DIMENSIONS,
   sanitizeAdvancedFilter,
@@ -956,6 +957,12 @@ export function mergeViewStatePersisted<T extends IssueViewState>(
         ))]
       : current.negatedFilters,
   };
+  // Property filters are conditions in advanced mode; flat ones stored next to
+  // a tree (by an earlier build) would otherwise filter without being shown.
+  if (merged.advancedFilter && Object.keys(merged.propertyFilters ?? {}).length > 0) {
+    const folded = foldPropertyFiltersIntoTree(merged.advancedFilter, merged.propertyFilters);
+    if (folded) Object.assign(merged, { advancedFilter: folded, propertyFilters: {} });
+  }
   return {
     ...merged,
     ...normalizeSortForGrouping(

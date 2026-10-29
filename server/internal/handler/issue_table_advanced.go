@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -17,11 +18,14 @@ import (
 var issueTableDueDates = []string{"overdue", "today", "this_week", "next_7_days", "none"}
 
 // issueTableFilterFields are the dimensions an advanced condition can test,
-// named like their flat `filters` counterparts.
+// named like their flat `filters` counterparts. A condition can also test a
+// custom property as `property:<definitionId>`.
 var issueTableFilterFields = []string{
 	"statuses", "priorities", "assignees", "creators",
 	"project_ids", "project_statuses", "label_ids", "relations", "due_dates",
 }
+
+const issueTableFilterPropertyPrefix = "property:"
 
 const (
 	issueTableFilterMaxConditions = 50
@@ -32,13 +36,14 @@ const (
 // issueTableFilterNode is one node of `filters.advanced`: a group when it has
 // `children`, otherwise a condition. The root is a group; a group directly
 // under the root may hold conditions only, so the tree is at most two levels
-// of parentheses deep.
+// of parentheses deep. Values are strings, except that a property condition
+// takes the members `filters.properties` does, operator objects included.
 type issueTableFilterNode struct {
 	Match    string                 `json:"match,omitempty"`
 	Children []issueTableFilterNode `json:"children,omitempty"`
 	Field    string                 `json:"field,omitempty"`
 	Negate   bool                   `json:"negate,omitempty"`
-	Values   []string               `json:"values,omitempty"`
+	Values   []json.RawMessage      `json:"values,omitempty"`
 }
 
 func (n issueTableFilterNode) isGroup() bool {
@@ -55,7 +60,7 @@ func canonicalIssueTableFilterNode(node *issueTableFilterNode) *issueTableFilter
 		Match:  node.Match,
 		Field:  node.Field,
 		Negate: node.Negate,
-		Values: sortedUniqueStrings(node.Values),
+		Values: sortedUniqueRawJSON(node.Values),
 	}
 	if len(node.Children) > 0 {
 		out.Children = make([]issueTableFilterNode, len(node.Children))
@@ -162,24 +167,40 @@ func (c *issueTableFilterCompiler) group(node issueTableFilterNode, depth int) (
 }
 
 func (c *issueTableFilterCompiler) condition(node issueTableFilterNode) (string, error) {
-	if !issueTableContainsString(issueTableFilterFields, node.Field) {
+	propertyID, isProperty := strings.CutPrefix(node.Field, issueTableFilterPropertyPrefix)
+	if !isProperty && !issueTableContainsString(issueTableFilterFields, node.Field) {
 		return "", invalidIssueTableFilter("invalid filters.advanced.field")
 	}
 	if len(node.Children) > 0 || node.Match != "" {
 		return "", invalidIssueTableFilter("invalid filters.advanced: a condition has no children")
 	}
-	values := sortedUniqueStrings(node.Values)
-	if len(values) == 0 {
+	if len(node.Values) == 0 {
 		return "", nil
 	}
-	if len(values) > issueTableFilterMaxValues {
+	if len(node.Values) > issueTableFilterMaxValues {
 		return "", invalidIssueTableFilter("invalid filters.advanced: too many values")
 	}
 	c.conditions++
 	if c.conditions > issueTableFilterMaxConditions {
 		return "", invalidIssueTableFilter("invalid filters.advanced: too many conditions")
 	}
-	predicate, err := c.fieldPredicate(node.Field, values)
+	var (
+		predicate string
+		err       error
+	)
+	if isProperty {
+		predicate, err = c.propertyPredicate(propertyID, node.Values)
+	} else {
+		values := make([]string, 0, len(node.Values))
+		for _, raw := range node.Values {
+			var value string
+			if json.Unmarshal(raw, &value) != nil {
+				return "", invalidIssueTableFilter("invalid filters.advanced values for %s", node.Field)
+			}
+			values = append(values, value)
+		}
+		predicate, err = c.fieldPredicate(node.Field, sortedUniqueStrings(values))
+	}
 	if err != nil {
 		return "", err
 	}
@@ -187,6 +208,19 @@ func (c *issueTableFilterCompiler) condition(node issueTableFilterNode) (string,
 		return "(" + predicate + ") IS NOT TRUE", nil
 	}
 	return predicate, nil
+}
+
+// propertyPredicate compiles a property condition exactly like the same
+// members under `filters.properties`.
+func (c *issueTableFilterCompiler) propertyPredicate(propertyID string, values []json.RawMessage) (string, error) {
+	groups, err := compilePropertiesFilter(map[string][]json.RawMessage{propertyID: values})
+	if err != nil {
+		return "", invalidIssueTableFilter("invalid filters.advanced: %s", err.Error())
+	}
+	if len(groups) == 0 {
+		return "", nil
+	}
+	return propertiesFilterPredicate(groups, c.addArg), nil
 }
 
 func (c *issueTableFilterCompiler) fieldPredicate(field string, values []string) (string, error) {

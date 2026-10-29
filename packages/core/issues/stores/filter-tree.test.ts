@@ -9,6 +9,7 @@ import {
   dueDateMatches,
   editAdvancedFilter,
   EMPTY_SIMPLE_FILTER_FIELDS,
+  foldPropertyFiltersIntoTree,
   pruneAdvancedFilter,
   sanitizeAdvancedFilter,
   simpleFromAdvancedFilter,
@@ -81,6 +82,24 @@ describe("simple ↔ advanced", () => {
     expect(simpleFromAdvancedFilter(createFilterGroup("all", [createFilterGroup("any", [status])]))).toBeNull();
   });
 
+  it("carries property filters as conditions", () => {
+    const fields = simple({
+      priorityFilters: ["urgent"],
+      propertyFilters: { p1: ["opt-a", "__none__"], p2: [{ op: "gte", value: "3" }] },
+    });
+    const tree = advancedFilterFromSimple(fields, []);
+    expect(tree.children.map((c) => c.type === "condition" && [c.field, c.values])).toEqual([
+      ["priority", ["urgent"]],
+      ["property:p1", ["opt-a", "__none__"]],
+      ["property:p2", [{ op: "gte", value: "3" }]],
+    ]);
+    expect(simpleFromAdvancedFilter(tree)).toEqual(fields);
+    // Simple mode has no "is not" for a property.
+    expect(
+      simpleFromAdvancedFilter(createFilterGroup("all", [createFilterCondition("property:p1", ["opt-a"], true)])),
+    ).toBeNull();
+  });
+
   it("accepts a lone condition under any, and ignores empty rows", () => {
     const status = createFilterCondition("status", ["todo"]);
     const tree = createFilterGroup("any", [status, createFilterCondition("label")]);
@@ -126,6 +145,26 @@ describe("tree helpers", () => {
     expect(countAdvancedConditions(withoutAdvancedFilterFields(tree, ["project"]))).toBe(1);
   });
 
+  it("folds flat property filters into a tree, ANDed like they were", () => {
+    const status = createFilterCondition("status", ["todo"]);
+    const label = createFilterCondition("label", ["l1"]);
+    const props = { p1: ["opt-a"] };
+    const all = foldPropertyFiltersIntoTree(createFilterGroup("all", [status]), props);
+    expect(all?.children.map((c) => c.type === "condition" && c.field)).toEqual(["status", "property:p1"]);
+
+    const any = foldPropertyFiltersIntoTree(createFilterGroup("any", [status, label]), props);
+    expect(any?.match).toBe("all");
+    expect(any?.children[0]).toMatchObject({ type: "group", match: "any", children: [status, label] });
+    expect(any?.children[1]).toMatchObject({ field: "property:p1", values: ["opt-a"] });
+
+    // An "any" root that already holds a group can't take another level.
+    expect(
+      foldPropertyFiltersIntoTree(createFilterGroup("any", [status, createFilterGroup("all", [label])]), props),
+    ).toBeNull();
+    const untouched = createFilterGroup("any", [status]);
+    expect(foldPropertyFiltersIntoTree(untouched, { p1: [] })).toBe(untouched);
+  });
+
   it("converts to the table query", () => {
     const tree = createFilterGroup("all", [
       createFilterCondition("project", ["p1"]),
@@ -133,6 +172,7 @@ describe("tree helpers", () => {
         createFilterCondition("priority", ["urgent"]),
         createFilterCondition("dueDate", ["overdue"], true),
         createFilterCondition("label"),
+        createFilterCondition("property:p1", [{ op: "lt", value: "3" }, "__none__"], true),
       ]),
     ]);
     expect(advancedFilterToTableQuery(tree)).toEqual({
@@ -144,6 +184,7 @@ describe("tree helpers", () => {
           children: [
             { field: "priorities", values: ["urgent"] },
             { field: "due_dates", negate: true, values: ["overdue"] },
+            { field: "property:p1", negate: true, values: [{ op: "lt", value: "3" }, "__none__"] },
           ],
         },
       ],
@@ -162,6 +203,13 @@ describe("sanitizeAdvancedFilter", () => {
         { type: "condition", id: "c2", field: "nope", values: ["x"] },
         { type: "condition", id: "c3", field: "creator", values: ["none", "member:u1", "robot:x"] },
         {
+          type: "condition",
+          id: "c4",
+          field: "property:p1",
+          values: ["opt-a", "", 3, { op: "gte", value: "2" }, { op: "bogus", value: "2" }, "opt-a"],
+        },
+        { type: "condition", id: "c5", field: "property:", values: ["x"] },
+        {
           type: "group",
           id: "g1",
           match: "all",
@@ -177,6 +225,13 @@ describe("sanitizeAdvancedFilter", () => {
       children: [
         { type: "condition", id: "c1", field: "priority", negated: true, values: ["urgent"] },
         { type: "condition", id: "c3", field: "creator", negated: false, values: ["member:u1"] },
+        {
+          type: "condition",
+          id: "c4",
+          field: "property:p1",
+          negated: false,
+          values: ["opt-a", { op: "gte", value: "2" }],
+        },
         { type: "group", id: "g1", match: "all", children: [] },
       ],
     });

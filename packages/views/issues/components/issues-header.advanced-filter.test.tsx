@@ -96,7 +96,7 @@ describe("IssueFilterMenu search", () => {
 });
 
 describe("IssueFilterMenu advanced mode", () => {
-  it("shows property filters in the panel, and Clear all clears them too", async () => {
+  it("turns property filters into conditions and offers properties as fields", async () => {
     const store = renderFilterMenu((s) => {
       s.getState().setPropertyFilterValues("estimate", ["3"]);
       s.getState().togglePriorityFilter("urgent");
@@ -105,14 +105,48 @@ describe("IssueFilterMenu advanced mode", () => {
     expect(await screen.findByRole("menuitem", { name: /Estimate/ })).toBeInTheDocument();
     fireEvent.click(await screen.findByRole("menuitem", { name: /Switch to advanced filter/ }));
     await screen.findByTestId("advanced-filter-panel");
-    expect(store.getState().propertyFilters).toEqual({ estimate: ["3"] });
-    expect(screen.getByTestId("advanced-property-row")).toHaveTextContent("Estimate");
-    expect(screen.getByRole("button", { name: "Add property filter" })).toBeInTheDocument();
+
+    expect(store.getState().propertyFilters).toEqual({});
+    expect(store.getState().advancedFilter?.children).toMatchObject([
+      { field: "priority", values: ["urgent"] },
+      { field: "property:estimate", values: ["3"] },
+    ]);
+    const rows = screen.getAllByTestId("advanced-filter-row");
+    expect(rows).toHaveLength(2);
+    expect(rows[1]).toHaveTextContent("Estimate");
+    expect(screen.queryByRole("button", { name: "Add property filter" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /^Add condition$/ }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Estimate/ }));
+    expect(store.getState().advancedFilter?.children[2]).toMatchObject({
+      field: "property:estimate",
+      values: [],
+    });
+
     fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
     expect(store.getState().advancedFilter?.children).toEqual([]);
-    expect(store.getState().propertyFilters).toEqual({});
-    expect(screen.queryByTestId("advanced-property-row")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Clear all" })).toBeDisabled();
+  });
+
+  it("edits a property condition with the property's own values", async () => {
+    const store = renderFilterMenu(
+      (s) =>
+        s.getState().setAdvancedFilter(
+          createFilterGroup("all", [createFilterCondition("property:estimate", [])]),
+        ),
+      true,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Filter" }));
+    await screen.findByTestId("advanced-filter-panel");
+    const values = await screen.findByRole("button", { name: "Values" });
+    await waitFor(() => expect(values).toBeEnabled());
+    fireEvent.click(values);
+    fireEvent.click(await screen.findByRole("menuitemcheckbox", { name: /No value/ }));
+    expect(store.getState().advancedFilter?.children).toMatchObject([
+      { field: "property:estimate", values: ["__none__"] },
+    ]);
+    // A plain "is" property condition is still a simple filter.
+    expect(screen.getByRole("button", { name: "Switch to simple filter" })).toBeEnabled();
   });
 
   it("switches to advanced with the current filters and opens the panel", async () => {

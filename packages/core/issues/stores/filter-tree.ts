@@ -1,10 +1,14 @@
-import type {
-  IssuePriority,
-  IssueStatus,
-  IssueTableFilterGroup,
-  IssueTableFilterNode,
-  IssueTableNegatableFilter,
-  ProjectStatus,
+import {
+  isKnownPropertyFilterOp,
+  isPropertyOperatorFilter,
+  propertyFilterValueKey,
+  type IssuePriority,
+  type IssueStatus,
+  type IssueTableFilterGroup,
+  type IssueTableFilterNode,
+  type IssueTableNegatableFilter,
+  type ProjectStatus,
+  type PropertyFilterValue,
 } from "../../types";
 import { PRIORITY_DISPLAY_ORDER } from "../config/priority";
 import { PROJECT_STATUS_ORDER } from "../../projects/config";
@@ -33,9 +37,9 @@ export const DUE_DATE_FILTERS: readonly DueDateFilter[] = [
   "none",
 ];
 
-/** The value dimensions: what the simple menu lists one row each for, what an
- *  advanced condition can test, and what can say "is not". Custom properties
- *  carry their own operators and are not part of this. */
+/** The built-in value dimensions: what the simple menu lists one row each
+ *  for and what can say "is not" there. Custom properties carry their own
+ *  operators and are not part of this. */
 export type NegatableFilterDimension =
   | "status"
   | "priority"
@@ -75,7 +79,24 @@ export const FILTER_DIMENSION_TABLE_FIELD: Record<NegatableFilterDimension, Issu
 /** Condition value for "no assignee" / "no project". */
 export const FILTER_NONE_VALUE = "none";
 
-export interface AdvancedFilterCondition {
+/** A custom property as a condition field. */
+export type PropertyFilterField = `property:${string}`;
+
+/** What an advanced condition can test: a built-in dimension or a property. */
+export type AdvancedFilterField = NegatableFilterDimension | PropertyFilterField;
+
+const PROPERTY_FIELD_PREFIX = "property:";
+
+export function propertyFilterField(propertyId: string): PropertyFilterField {
+  return `${PROPERTY_FIELD_PREFIX}${propertyId}`;
+}
+
+/** The property a field tests, or null for a built-in dimension. */
+export function propertyIdOfField(field: AdvancedFilterField): string | null {
+  return field.startsWith(PROPERTY_FIELD_PREFIX) ? field.slice(PROPERTY_FIELD_PREFIX.length) : null;
+}
+
+export interface DimensionFilterCondition {
   type: "condition";
   id: string;
   field: NegatableFilterDimension;
@@ -86,6 +107,22 @@ export interface AdvancedFilterCondition {
    * simple filter stores.
    */
   values: string[];
+}
+
+export interface PropertyFilterCondition {
+  type: "condition";
+  id: string;
+  field: PropertyFilterField;
+  negated: boolean;
+  /** OR within the condition, in the simple property filter's shape: option
+   *  ids, the "no value" sentinel, or operator objects. */
+  values: PropertyFilterValue[];
+}
+
+export type AdvancedFilterCondition = DimensionFilterCondition | PropertyFilterCondition;
+
+export function isPropertyCondition(condition: AdvancedFilterCondition): condition is PropertyFilterCondition {
+  return propertyIdOfField(condition.field) !== null;
 }
 
 export interface AdvancedFilterGroup {
@@ -112,6 +149,7 @@ export interface SimpleFilterFields {
   relationFilters: IssueRelationFilter[];
   dueDateFilters: DueDateFilter[];
   negatedFilters: NegatableFilterDimension[];
+  propertyFilters: Record<string, PropertyFilterValue[]>;
 }
 
 export const EMPTY_SIMPLE_FILTER_FIELDS: Readonly<SimpleFilterFields> = {
@@ -127,14 +165,30 @@ export const EMPTY_SIMPLE_FILTER_FIELDS: Readonly<SimpleFilterFields> = {
   relationFilters: [],
   dueDateFilters: [],
   negatedFilters: [],
+  propertyFilters: {},
 };
 
 export function createFilterCondition(
   field: NegatableFilterDimension,
-  values: string[] = [],
+  values?: string[],
+  negated?: boolean,
+): DimensionFilterCondition;
+export function createFilterCondition(
+  field: PropertyFilterField,
+  values?: PropertyFilterValue[],
+  negated?: boolean,
+): PropertyFilterCondition;
+export function createFilterCondition(
+  field: AdvancedFilterField,
+  values?: PropertyFilterValue[],
+  negated?: boolean,
+): AdvancedFilterCondition;
+export function createFilterCondition(
+  field: AdvancedFilterField,
+  values: PropertyFilterValue[] = [],
   negated = false,
 ): AdvancedFilterCondition {
-  return { type: "condition", id: createSafeId(), field, negated, values };
+  return { type: "condition", id: createSafeId(), field, negated, values } as AdvancedFilterCondition;
 }
 
 export function createFilterGroup(
@@ -252,12 +306,27 @@ function sanitizeNode(raw: unknown, depth: number): AdvancedFilterNode | null {
     return { type: "group", id, match: node.match === "any" ? "any" : "all", children };
   }
   if (node.type !== "condition") return null;
+  const negated = node.negated === true;
+  if (typeof node.field === "string" && node.field.length > PROPERTY_FIELD_PREFIX.length) {
+    const propertyField = node.field as PropertyFilterField;
+    if (propertyIdOfField(propertyField) !== null) {
+      const members = Array.isArray(node.values)
+        ? node.values.filter(
+            (v): v is PropertyFilterValue =>
+              (typeof v === "string" && v.length > 0) ||
+              (isPropertyOperatorFilter(v) && isKnownPropertyFilterOp(v.op)),
+          )
+        : [];
+      const values = [...new Map(members.map((v) => [propertyFilterValueKey(v), v])).values()];
+      return { type: "condition", id, field: propertyField, negated, values };
+    }
+  }
   const field = node.field as NegatableFilterDimension;
   if (!NEGATABLE_FILTER_DIMENSIONS.includes(field)) return null;
   const values = Array.isArray(node.values)
     ? [...new Set(node.values.filter((v): v is string => typeof v === "string"))]
     : [];
-  return { type: "condition", id, field, negated: node.negated === true, values: knownValues(field, values) };
+  return { type: "condition", id, field, negated, values: knownValues(field, values) };
 }
 
 /**
@@ -284,7 +353,7 @@ function parseActorValue(value: string): { type: "member" | "agent" | "squad"; i
 
 /** One simple dimension's selection in condition-value form. */
 export function simpleFieldValues(
-  fields: Omit<SimpleFilterFields, "negatedFilters">,
+  fields: Omit<SimpleFilterFields, "negatedFilters" | "propertyFilters">,
   field: NegatableFilterDimension,
 ): string[] {
   switch (field) {
@@ -312,25 +381,29 @@ export function simpleFieldValues(
   }
 }
 
-/** One condition per simple dimension that has values, ANDed: the same
- *  filter, as a rule list. `negated` must already be the effective set. */
+/** One condition per simple dimension and property that has values, ANDed:
+ *  the same filter, as a rule list. `negated` must already be the effective
+ *  set. */
 export function advancedFilterFromSimple(
   fields: Omit<SimpleFilterFields, "negatedFilters">,
   negated: readonly NegatableFilterDimension[],
 ): AdvancedFilterGroup {
-  const children = NEGATABLE_FILTER_DIMENSIONS.flatMap((field) => {
+  const children: AdvancedFilterNode[] = NEGATABLE_FILTER_DIMENSIONS.flatMap((field) => {
     const values = simpleFieldValues(fields, field);
     return values.length > 0
       ? [createFilterCondition(field, [...values], negated.includes(field))]
       : [];
   });
+  for (const [propertyId, values] of Object.entries(fields.propertyFilters)) {
+    if (values.length > 0) children.push(createFilterCondition(propertyFilterField(propertyId), [...values]));
+  }
   return createFilterGroup("all", children);
 }
 
 /**
  * The simple fields a tree means, or null when simple mode cannot say it: a
- * group, an "any" across two or more conditions, or one dimension tested
- * twice. Empty conditions are ignored.
+ * group, an "any" across two or more conditions, one field tested twice, or
+ * "is not" on a property. Empty conditions are ignored.
  */
 export function simpleFromAdvancedFilter(
   group: AdvancedFilterGroup | null | undefined,
@@ -341,13 +414,19 @@ export function simpleFromAdvancedFilter(
     assigneeFilters: [],
     creatorFilters: [],
     negatedFilters: [],
+    propertyFilters: {},
   };
   if (!pruned) return fields;
   if (pruned.match === "any" && pruned.children.length > 1) return null;
-  const seen = new Set<NegatableFilterDimension>();
+  const seen = new Set<AdvancedFilterField>();
   for (const child of pruned.children) {
     if (child.type === "group" || seen.has(child.field)) return null;
     seen.add(child.field);
+    if (isPropertyCondition(child)) {
+      if (child.negated) return null;
+      fields.propertyFilters[propertyIdOfField(child.field) ?? ""] = [...child.values];
+      continue;
+    }
     if (child.negated) fields.negatedFilters.push(child.field);
     const values = child.values;
     const none = values.includes(FILTER_NONE_VALUE);
@@ -391,20 +470,50 @@ export function simpleFromAdvancedFilter(
   return fields;
 }
 
+/** The pruned tree without the conditions `drop` picks. */
+export function withoutAdvancedFilterConditions(
+  group: AdvancedFilterGroup | null | undefined,
+  drop: (condition: AdvancedFilterCondition) => boolean,
+): AdvancedFilterGroup | null {
+  if (!group) return null;
+  const strip = (node: AdvancedFilterGroup): AdvancedFilterGroup => ({
+    ...node,
+    children: node.children.flatMap((child): AdvancedFilterNode[] =>
+      child.type === "group" ? [strip(child)] : drop(child) ? [] : [child],
+    ),
+  });
+  return pruneAdvancedFilter(strip(group));
+}
+
 /** The pruned tree without conditions on these fields — the ones a surface's
  *  scope already fixes. */
 export function withoutAdvancedFilterFields(
   group: AdvancedFilterGroup | null | undefined,
   fields: readonly NegatableFilterDimension[],
 ): AdvancedFilterGroup | null {
-  if (!group || fields.length === 0) return pruneAdvancedFilter(group);
-  const strip = (node: AdvancedFilterGroup): AdvancedFilterGroup => ({
-    ...node,
-    children: node.children.flatMap((child): AdvancedFilterNode[] =>
-      child.type === "group" ? [strip(child)] : fields.includes(child.field) ? [] : [child],
-    ),
-  });
-  return pruneAdvancedFilter(strip(group));
+  if (fields.length === 0) return pruneAdvancedFilter(group);
+  return withoutAdvancedFilterConditions(group, (condition) =>
+    (fields as readonly string[]).includes(condition.field),
+  );
+}
+
+/**
+ * Flat property filters folded into a tree as conditions, ANDed like they
+ * were. Returns null when the tree's shape can't take them: an "any" root
+ * that already holds a group.
+ */
+export function foldPropertyFiltersIntoTree(
+  tree: AdvancedFilterGroup,
+  propertyFilters: Record<string, PropertyFilterValue[]>,
+): AdvancedFilterGroup | null {
+  const conditions = Object.entries(propertyFilters)
+    .filter(([, values]) => values.length > 0)
+    .map(([propertyId, values]) => createFilterCondition(propertyFilterField(propertyId), [...values]));
+  if (conditions.length === 0) return tree;
+  if (tree.match === "all") return { ...tree, children: [...tree.children, ...conditions] };
+  if (tree.children.some((child) => child.type === "group")) return null;
+  const inner = tree.children.length > 0 ? [{ ...tree, id: createSafeId() }] : [];
+  return { ...tree, match: "all", children: [...inner, ...conditions] };
 }
 
 /**
@@ -443,10 +552,10 @@ export function advancedFilterConditionSlots(group: AdvancedFilterGroup | null |
 /** The server rejects more conditions than this in one tree. */
 export const ADVANCED_FILTER_MAX_CONDITIONS = 50;
 
-/** Whether a (pruned) tree tests this dimension anywhere. */
+/** Whether a (pruned) tree tests this field anywhere. */
 export function advancedFilterUsesField(
   group: AdvancedFilterGroup | null | undefined,
-  field: NegatableFilterDimension,
+  field: AdvancedFilterField,
 ): boolean {
   if (!group) return false;
   return group.children.some((child) =>
@@ -464,7 +573,7 @@ export function advancedFilterToTableQuery(
     node.type === "group"
       ? { match: node.match, children: node.children.map(convert) }
       : {
-          field: FILTER_DIMENSION_TABLE_FIELD[node.field],
+          field: isPropertyCondition(node) ? node.field : FILTER_DIMENSION_TABLE_FIELD[node.field],
           ...(node.negated ? { negate: true } : {}),
           values: node.values,
         };
@@ -497,7 +606,7 @@ export function statusColumnFilter<S extends string>(
   const required =
     pruned.match === "all" || pruned.children.length === 1
       ? pruned.children.filter(
-          (child): child is AdvancedFilterCondition => child.type === "condition" && child.field === "status",
+          (child): child is DimensionFilterCondition => child.type === "condition" && child.field === "status",
         )
       : [];
   const [only] = required;
@@ -507,7 +616,9 @@ export function statusColumnFilter<S extends string>(
   const named = new Set<string>();
   const visit = (node: AdvancedFilterNode) => {
     if (node.type === "group") node.children.forEach(visit);
-    else if (node.field === "status" && !node.negated) node.values.forEach((value) => named.add(value));
+    else if (node.field === "status" && !node.negated) {
+      for (const value of node.values) if (typeof value === "string") named.add(value);
+    }
   };
   visit(pruned);
   return {
@@ -524,6 +635,6 @@ export function advancedFilterSignature(group: AdvancedFilterGroup | null | unde
   const sign = (node: AdvancedFilterNode): unknown =>
     node.type === "group"
       ? [node.match, node.children.map(sign)]
-      : [node.field, node.negated, [...node.values].sort()];
+      : [node.field, node.negated, node.values.map(propertyFilterValueKey).sort()];
   return JSON.stringify(sign(pruned));
 }

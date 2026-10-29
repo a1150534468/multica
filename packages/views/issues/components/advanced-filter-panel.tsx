@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
-import { ChevronDown, Ellipsis, ListTree, Plus } from "@multica/ui/icons";
+import { useQuery } from "@tanstack/react-query";
+import { ChevronDown, Ellipsis, ListTree, Plus, SlidersHorizontal } from "@multica/ui/icons";
 import { Button } from "@multica/ui/components/ui/button";
 import { cn } from "@multica/ui/lib/utils";
 import {
@@ -10,12 +11,14 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@multica/ui/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@multica/ui/components/ui/select";
@@ -25,15 +28,34 @@ import {
   createFilterCondition,
   createFilterGroup,
   editAdvancedFilter,
+  isPropertyCondition,
+  propertyFilterField,
+  propertyIdOfField,
   simpleFromAdvancedFilter,
   type AdvancedFilterCondition,
+  type AdvancedFilterField,
   type AdvancedFilterGroup,
   type AdvancedFilterNode,
+  type DimensionFilterCondition,
   type NegatableFilterDimension,
+  type PropertyFilterCondition,
 } from "@multica/core/issues/stores/filter-tree";
 import { useViewStore } from "@multica/core/issues/stores/view-store-context";
+import { useWorkspaceId } from "@multica/core/hooks";
+import { propertyListOptions } from "@multica/core/properties";
+import { memberListOptions } from "@multica/core/workspace/queries";
+import {
+  isActorPropertyType,
+  isFilterablePropertyType,
+  propertyFilterValueKey,
+  type IssueProperty,
+  type PropertyFilterValue,
+} from "@multica/core/types";
 import { useT } from "../../i18n";
 import { FILTER_ITEM_CLASS, HoverCheck } from "../../common/hover-check";
+import { PropertyIcon } from "../../common/property-icon";
+import { buildChipActorNames, summarize } from "./filter-chips-bar";
+import { PropertyFilterOptions, usePropertyValueName } from "./property-filter-options";
 import {
   FILTER_FIELD_ICONS,
   matchesFilterQuery,
@@ -51,32 +73,87 @@ export function stopMenuSearchKeys(event: React.KeyboardEvent) {
 
 type Catalog = (field: NegatableFilterDimension) => FilterValueOption[];
 
-export const CONNECTOR_CLASS = "flex h-7 w-14 shrink-0 items-center text-caption text-muted-foreground";
+const CONNECTOR_CLASS = "flex h-7 w-14 shrink-0 items-center text-caption text-muted-foreground";
 const ROW_SELECT_CLASS = "h-7 rounded-md text-caption";
+const VALUE_TRIGGER_CLASS =
+  "flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md border border-input px-2 text-left text-caption outline-none hover:bg-accent/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 dark:bg-input/30";
+
+interface FieldOption {
+  field: AdvancedFilterField;
+  label: string;
+  icon: ReactNode;
+}
+
+/** What a condition can test: the surface's built-in fields, then every
+ *  filterable custom property. */
+interface ConditionFields {
+  builtIn: FieldOption[];
+  properties: FieldOption[];
+  propertyById: ReadonlyMap<string, IssueProperty>;
+  /** Label and icon for any stored field, including a hidden or deleted one. */
+  describe: (field: AdvancedFilterField) => FieldOption;
+}
+
+function useConditionFields(fields: readonly NegatableFilterDimension[]): ConditionFields {
+  const { t } = useT("issues");
+  const labels = useFilterFieldLabels();
+  const wsId = useWorkspaceId();
+  const { data: workspaceProperties = [] } = useQuery(propertyListOptions(wsId));
+  const unknownLabel = t(($) => $.filters.advanced_unknown_property);
+  return useMemo(() => {
+    const dimension = (field: NegatableFilterDimension): FieldOption => {
+      const Icon = FILTER_FIELD_ICONS[field];
+      return { field, label: labels[field], icon: <Icon className="size-3.5 text-muted-foreground" /> };
+    };
+    const property = (p: IssueProperty): FieldOption => ({
+      field: propertyFilterField(p.id),
+      label: p.name,
+      icon: p.icon ? (
+        <PropertyIcon property={p} className="size-3.5 text-caption" />
+      ) : (
+        <SlidersHorizontal className="size-3.5 text-muted-foreground" />
+      ),
+    });
+    const filterable = workspaceProperties.filter((p) => isFilterablePropertyType(p.type));
+    const propertyById = new Map(filterable.map((p) => [p.id, p]));
+    return {
+      builtIn: fields.map(dimension),
+      properties: filterable.map(property),
+      propertyById,
+      describe: (field) => {
+        const propertyId = propertyIdOfField(field);
+        if (propertyId === null) return dimension(field as NegatableFilterDimension);
+        const known = propertyById.get(propertyId);
+        return known
+          ? property(known)
+          : { field, label: unknownLabel, icon: <SlidersHorizontal className="size-3.5 text-muted-foreground" /> };
+      },
+    };
+  }, [fields, labels, workspaceProperties, unknownLabel]);
+}
 
 function FieldPickerMenu({
   fields,
   trigger,
   onPick,
 }: {
-  fields: readonly NegatableFilterDimension[];
+  fields: ConditionFields;
   trigger: React.ReactElement;
-  onPick: (field: NegatableFilterDimension) => void;
+  onPick: (field: AdvancedFilterField) => void;
 }) {
-  const labels = useFilterFieldLabels();
+  const item = (option: FieldOption) => (
+    <DropdownMenuItem key={option.field} onClick={() => onPick(option.field)}>
+      {option.icon}
+      <span className="truncate">{option.label}</span>
+    </DropdownMenuItem>
+  );
   return (
     <DropdownMenu>
       <DropdownMenuTrigger render={trigger} />
-      <DropdownMenuContent align="start" className="w-48">
-        {fields.map((field) => {
-          const Icon = FILTER_FIELD_ICONS[field];
-          return (
-            <DropdownMenuItem key={field} onClick={() => onPick(field)}>
-              <Icon className="size-3.5" />
-              {labels[field]}
-            </DropdownMenuItem>
-          );
-        })}
+      <DropdownMenuContent align="start" className="w-52">
+        {fields.builtIn.map(item)}
+        {fields.properties.length > 0 && <DropdownMenuSeparator />}
+        {fields.properties.map(item)}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -173,7 +250,7 @@ function ValuePicker({
   catalog,
   onChange,
 }: {
-  condition: AdvancedFilterCondition;
+  condition: DimensionFilterCondition;
   catalog: Catalog;
   onChange: (values: string[]) => void;
 }) {
@@ -207,7 +284,7 @@ function ValuePicker({
           <button
             type="button"
             aria-label={t(($) => $.filters.advanced_values_label)}
-            className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md border border-input px-2 text-left text-caption outline-none hover:bg-accent/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+            className={VALUE_TRIGGER_CLASS}
           />
         }
       >
@@ -265,7 +342,68 @@ function ValuePicker({
   );
 }
 
-export function RowActions({ children }: { children: ReactNode }) {
+/** A property condition edits its values with the property's own options:
+ *  option checkboxes, operator + value for scalars, and "No value". */
+function PropertyValuePicker({
+  condition,
+  property,
+  onChange,
+}: {
+  condition: PropertyFilterCondition;
+  property: IssueProperty | undefined;
+  onChange: (values: PropertyFilterValue[]) => void;
+}) {
+  const { t } = useT("issues");
+  const wsId = useWorkspaceId();
+  const { data: members = [] } = useQuery({
+    ...memberListOptions(wsId),
+    enabled: !!property && isActorPropertyType(property.type),
+  });
+  const actorName = useMemo(() => buildChipActorNames(members, [], []), [members]);
+  const valueName = usePropertyValueName(actorName);
+  const summary =
+    condition.values.length === 0
+      ? null
+      : summarize(condition.values.map((value) => (property ? valueName(property, value) : undefined)));
+  const toggle = (value: string) =>
+    onChange(
+      condition.values.some((v) => propertyFilterValueKey(v) === value)
+        ? condition.values.filter((v) => propertyFilterValueKey(v) !== value)
+        : [...condition.values, value],
+    );
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        disabled={!property}
+        render={
+          <button
+            type="button"
+            aria-label={t(($) => $.filters.advanced_values_label)}
+            className={VALUE_TRIGGER_CLASS}
+          />
+        }
+      >
+        <span className={cn("min-w-0 flex-1 truncate", summary ? "font-medium" : "text-muted-foreground")}>
+          {summary ?? t(($) => $.filters.advanced_values_placeholder)}
+        </span>
+        <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+      </DropdownMenuTrigger>
+      {property && (
+        <DropdownMenuContent align="start" className="max-h-80 w-auto min-w-52">
+          <PropertyFilterOptions
+            property={property}
+            counts={undefined}
+            selected={condition.values}
+            onToggle={toggle}
+            onSetValues={onChange}
+          />
+        </DropdownMenuContent>
+      )}
+    </DropdownMenu>
+  );
+}
+
+function RowActions({ children }: { children: ReactNode }) {
   const { t } = useT("issues");
   return (
     <DropdownMenu>
@@ -296,33 +434,36 @@ function ConditionRow({
   onEdit,
 }: {
   condition: AdvancedFilterCondition;
-  fields: readonly NegatableFilterDimension[];
+  fields: ConditionFields;
   catalog: Catalog;
   canAdd: boolean;
   onEdit: (edit: (node: AdvancedFilterNode) => AdvancedFilterNode[]) => void;
 }) {
   const { t } = useT("issues");
-  const labels = useFilterFieldLabels();
-  // A stored condition on a field this surface hides still renders, so it
-  // can be seen and removed.
-  const fieldItems = (fields.includes(condition.field) ? fields : [...fields, condition.field]).map(
-    (field) => ({ value: field, label: labels[field] }),
-  );
+  const current = fields.describe(condition.field);
+  // A stored condition on a field this surface hides (or a deleted property)
+  // still renders, so it can be seen and removed.
+  const known = [...fields.builtIn, ...fields.properties].some((o) => o.field === condition.field);
+  const fieldItems = [...fields.builtIn, ...fields.properties, ...(known ? [] : [current])];
   const operatorItems = [
     { value: "is", label: t(($) => $.filters.operator_is) },
     { value: "is_not", label: t(($) => $.filters.operator_is_not) },
   ];
-  const update = (patch: Partial<AdvancedFilterCondition>) =>
-    onEdit((node) => [{ ...(node as AdvancedFilterCondition), ...patch }]);
-  const FieldIcon = FILTER_FIELD_ICONS[condition.field];
+  const replace = (next: AdvancedFilterCondition) => onEdit(() => [next]);
+  const fieldItem = (option: FieldOption) => (
+    <SelectItem key={option.field} value={option.field} className="text-caption">
+      {option.icon}
+      <span className="truncate">{option.label}</span>
+    </SelectItem>
+  );
   return (
     <>
       <Select
-        items={fieldItems}
+        items={fieldItems.map((option) => ({ value: option.field, label: option.label }))}
         value={condition.field}
         onValueChange={(next) => {
           if (next && next !== condition.field) {
-            update({ field: next as NegatableFilterDimension, values: [], negated: false });
+            replace({ ...condition, field: next, values: [], negated: false } as AdvancedFilterCondition);
           }
         }}
       >
@@ -331,25 +472,20 @@ function ConditionRow({
           aria-label={t(($) => $.filters.advanced_field_label)}
           className={cn(ROW_SELECT_CLASS, "w-36 shrink-0")}
         >
-          <FieldIcon className="size-3.5 text-muted-foreground" />
-          <SelectValue />
+          {current.icon}
+          <SelectValue className="truncate" />
         </SelectTrigger>
-        <SelectContent alignItemWithTrigger={false} align="start">
-          {fieldItems.map((item) => {
-            const Icon = FILTER_FIELD_ICONS[item.value];
-            return (
-              <SelectItem key={item.value} value={item.value} className="text-caption">
-                <Icon className="size-3.5 text-muted-foreground" />
-                {item.label}
-              </SelectItem>
-            );
-          })}
+        <SelectContent alignItemWithTrigger={false} align="start" className="max-h-80">
+          {fields.builtIn.map(fieldItem)}
+          {fields.properties.length > 0 && <SelectSeparator />}
+          {fields.properties.map(fieldItem)}
+          {!known && fieldItem(current)}
         </SelectContent>
       </Select>
       <Select
         items={operatorItems}
         value={condition.negated ? "is_not" : "is"}
-        onValueChange={(next) => update({ negated: next === "is_not" })}
+        onValueChange={(next) => replace({ ...condition, negated: next === "is_not" })}
       >
         <SelectTrigger
           size="sm"
@@ -366,7 +502,15 @@ function ConditionRow({
           ))}
         </SelectContent>
       </Select>
-      <ValuePicker condition={condition} catalog={catalog} onChange={(values) => update({ values })} />
+      {isPropertyCondition(condition) ? (
+        <PropertyValuePicker
+          condition={condition}
+          property={fields.propertyById.get(propertyIdOfField(condition.field) ?? "")}
+          onChange={(values) => replace({ ...condition, values })}
+        />
+      ) : (
+        <ValuePicker condition={condition} catalog={catalog} onChange={(values) => replace({ ...condition, values })} />
+      )}
       <RowActions>
         <DropdownMenuItem
           disabled={!canAdd}
@@ -387,7 +531,7 @@ function ConditionRow({
   );
 }
 
-export function AddButton({ children, ...props }: React.ComponentProps<typeof Button>) {
+function AddButton({ children, ...props }: React.ComponentProps<typeof Button>) {
   return (
     <Button variant="ghost" size="sm" className="h-7 gap-1.5 px-2 text-caption text-muted-foreground" {...props}>
       <Plus className="size-3.5" />
@@ -396,27 +540,16 @@ export function AddButton({ children, ...props }: React.ComponentProps<typeof Bu
   );
 }
 
-/** Custom-property filters stay outside the tree and are ANDed with it; the
- *  caller renders them, since their editors belong to the simple menu. */
-export interface AdvancedPanelProperties {
-  rows: ReactNode;
-  addMenu: ReactNode;
-  active: boolean;
-  onClear: () => void;
-}
-
 /**
  * The advanced filter: a rule list with "all" / "any" and one level of
  * groups, edited in place on the view store. Edits apply live, like the
  * simple menu; rows without values filter nothing until they get one.
  */
 export function AdvancedFilterPanel({
-  fields,
-  properties,
+  fields: surfaceFields,
 }: {
   /** Fields the surface offers; a scope that fixes one leaves it out. */
   fields: readonly NegatableFilterDimension[];
-  properties?: AdvancedPanelProperties;
 }) {
   const { t } = useT("issues");
   const stored = useViewStore((s) => s.advancedFilter);
@@ -425,6 +558,7 @@ export function AdvancedFilterPanel({
   const emptyRoot = useMemo(() => createFilterGroup(), []);
   const root = stored ?? emptyRoot;
   const catalog = useFilterValueCatalog(true);
+  const fields = useConditionFields(surfaceFields);
   const canAdd = advancedFilterConditionSlots(root) < ADVANCED_FILTER_MAX_CONDITIONS;
   const representable = simpleFromAdvancedFilter(root) !== null;
 
@@ -452,7 +586,7 @@ export function AdvancedFilterPanel({
       </div>
 
       <div className="flex max-h-[60vh] flex-col gap-1.5 overflow-y-auto px-3 py-1">
-        {root.children.length === 0 && !properties?.active && (
+        {root.children.length === 0 && (
           <p className="py-3 text-caption text-muted-foreground">{t(($) => $.filters.advanced_empty)}</p>
         )}
         {root.children.map((child, index) => (
@@ -506,7 +640,6 @@ export function AdvancedFilterPanel({
             )}
           </div>
         ))}
-        {properties?.active && properties.rows}
       </div>
 
       <div className="flex items-center gap-1 px-2 py-1.5">
@@ -526,7 +659,6 @@ export function AdvancedFilterPanel({
             )
           }
         />
-        {properties?.addMenu}
       </div>
 
       <div className="flex items-center gap-2 border-t border-border px-2 py-1.5">
@@ -548,11 +680,8 @@ export function AdvancedFilterPanel({
           variant="ghost"
           size="sm"
           className="ml-auto h-7 shrink-0 px-2 text-caption text-muted-foreground"
-          disabled={root.children.length === 0 && !properties?.active}
-          onClick={() => {
-            setAdvancedFilter(createFilterGroup(root.match));
-            properties?.onClear();
-          }}
+          disabled={root.children.length === 0}
+          onClick={() => setAdvancedFilter(createFilterGroup(root.match))}
         >
           {t(($) => $.filters.advanced_clear)}
         </Button>

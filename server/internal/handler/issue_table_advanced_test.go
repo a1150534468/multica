@@ -1,14 +1,30 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"sort"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/multica-ai/multica/server/internal/testutil"
 )
+
+// rawValues encodes condition values the way a client sends them.
+func rawValues(values ...any) []json.RawMessage {
+	out := make([]json.RawMessage, 0, len(values))
+	for _, value := range values {
+		buf, err := json.Marshal(value)
+		if err != nil {
+			panic(err)
+		}
+		out = append(out, buf)
+	}
+	return out
+}
 
 // issueTableFixtureRows lists, sorted, the ids from `fixture` that a workspace
 // table query with these filters returns.
@@ -86,8 +102,10 @@ func TestIssueTableRowsAdvancedFilter(t *testing.T) {
 	issue := func(title string, cols testutil.Cols) string {
 		return dbfx.Issue(t, fmt.Sprintf("advanced %s %d", title, suffix), cols)
 	}
-	urgentInProject := issue("urgent in project", testutil.Cols{"priority": "urgent", "project_id": project})
-	bugInProject := issue("bug in project", testutil.Cols{"priority": "low", "project_id": project, "due_date": "2026-03-10"})
+	estimate := uuid.NewString()
+	estimateOf := func(n int) any { return testutil.Raw(fmt.Sprintf(`'{"%s": %d}'::jsonb`, estimate, n)) }
+	urgentInProject := issue("urgent in project", testutil.Cols{"priority": "urgent", "project_id": project, "properties": estimateOf(5)})
+	bugInProject := issue("bug in project", testutil.Cols{"priority": "low", "project_id": project, "due_date": "2026-03-10", "properties": estimateOf(2)})
 	quietInProject := issue("quiet in project", testutil.Cols{"priority": "low", "project_id": project, "status": "done"})
 	urgentElsewhere := issue("urgent elsewhere", testutil.Cols{"priority": "urgent", "assignee_type": "member", "assignee_id": testUserID})
 	dbfx.InsertNoID(t, "issue_to_label", testutil.Cols{"issue_id": bugInProject, "label_id": label},
@@ -95,9 +113,10 @@ func TestIssueTableRowsAdvancedFilter(t *testing.T) {
 	fixture := map[string]struct{}{
 		urgentInProject: {}, bugInProject: {}, quietInProject: {}, urgentElsewhere: {},
 	}
-	cond := func(field string, negate bool, values ...string) issueTableFilterNode {
-		return issueTableFilterNode{Field: field, Negate: negate, Values: values}
+	cond := func(field string, negate bool, values ...any) issueTableFilterNode {
+		return issueTableFilterNode{Field: field, Negate: negate, Values: rawValues(values...)}
 	}
+	atLeast3 := map[string]string{"op": "gte", "value": "3"}
 	assertTree := func(name string, root issueTableFilterNode, want ...string) {
 		t.Helper()
 		got := issueTableFixtureRows(t, fixture, issueTableFiltersRequest{Advanced: &root, Today: "2026-03-11"})
@@ -150,6 +169,23 @@ func TestIssueTableRowsAdvancedFilter(t *testing.T) {
 			cond("priorities", false, "urgent"),
 		}},
 		urgentInProject, urgentElsewhere)
+	assertTree("a property condition ORs with a dimension",
+		issueTableFilterNode{Match: "any", Children: []issueTableFilterNode{
+			cond("property:"+estimate, false, atLeast3),
+			cond("label_ids", false, label),
+		}},
+		urgentInProject, bugInProject)
+	assertTree("a negated property condition keeps rows without a value",
+		issueTableFilterNode{Children: []issueTableFilterNode{
+			cond("property:"+estimate, true, atLeast3),
+		}},
+		bugInProject, quietInProject, urgentElsewhere)
+	assertTree("a property condition takes no value",
+		issueTableFilterNode{Children: []issueTableFilterNode{
+			cond("property:"+estimate, false, noPropertyValue),
+			cond("priorities", false, "urgent"),
+		}},
+		urgentElsewhere)
 	got := issueTableFixtureRows(t, fixture, issueTableFiltersRequest{
 		ProjectIDs: []string{project},
 		Advanced: &issueTableFilterNode{Children: []issueTableFilterNode{
@@ -164,25 +200,30 @@ func TestIssueTableRowsAdvancedFilter(t *testing.T) {
 func TestIssueTableRowsRejectsInvalidAdvancedAndDueDates(t *testing.T) {
 	nested := issueTableFilterNode{Children: []issueTableFilterNode{
 		{Match: "any", Children: []issueTableFilterNode{
-			{Match: "all", Children: []issueTableFilterNode{{Field: "priorities", Values: []string{"high"}}}},
+			{Match: "all", Children: []issueTableFilterNode{{Field: "priorities", Values: rawValues("high")}}},
 		}},
 	}}
 	tooMany := issueTableFilterNode{}
 	for i := 0; i <= issueTableFilterMaxConditions; i++ {
-		tooMany.Children = append(tooMany.Children, issueTableFilterNode{Field: "priorities", Values: []string{"high"}})
+		tooMany.Children = append(tooMany.Children, issueTableFilterNode{Field: "priorities", Values: rawValues("high")})
 	}
 	for name, filters := range map[string]issueTableFiltersRequest{
 		"unknown bucket":         {DueDates: []string{"tomorrow"}, Today: "2026-03-11"},
 		"bucket without today":   {DueDates: []string{"today"}},
 		"malformed today":        {DueDates: []string{"today"}, Today: "11/03/2026"},
 		"tree nested too deep":   {Advanced: &nested},
-		"unknown field":          {Advanced: &issueTableFilterNode{Children: []issueTableFilterNode{{Field: "title", Values: []string{"x"}}}}},
-		"bad actor value":        {Advanced: &issueTableFilterNode{Children: []issueTableFilterNode{{Field: "assignees", Values: []string{"robot:1"}}}}},
-		"creator cannot be none": {Advanced: &issueTableFilterNode{Children: []issueTableFilterNode{{Field: "creators", Values: []string{"none"}}}}},
+		"unknown field":          {Advanced: &issueTableFilterNode{Children: []issueTableFilterNode{{Field: "title", Values: rawValues("x")}}}},
+		"bad actor value":        {Advanced: &issueTableFilterNode{Children: []issueTableFilterNode{{Field: "assignees", Values: rawValues("robot:1")}}}},
+		"creator cannot be none": {Advanced: &issueTableFilterNode{Children: []issueTableFilterNode{{Field: "creators", Values: rawValues("none")}}}},
 		"unknown match":          {Advanced: &issueTableFilterNode{Match: "xor"}},
-		"root is a condition":    {Advanced: &issueTableFilterNode{Field: "priorities", Values: []string{"high"}}},
-		"tree due without today": {Advanced: &issueTableFilterNode{Children: []issueTableFilterNode{{Field: "due_dates", Values: []string{"overdue"}}}}},
+		"root is a condition":    {Advanced: &issueTableFilterNode{Field: "priorities", Values: rawValues("high")}},
+		"tree due without today": {Advanced: &issueTableFilterNode{Children: []issueTableFilterNode{{Field: "due_dates", Values: rawValues("overdue")}}}},
 		"too many conditions":    {Advanced: &tooMany},
+		"property id not a uuid": {Advanced: &issueTableFilterNode{Children: []issueTableFilterNode{{Field: "property:estimate", Values: rawValues("3")}}}},
+		"bad property operator": {Advanced: &issueTableFilterNode{Children: []issueTableFilterNode{
+			{Field: "property:" + uuid.NewString(), Values: rawValues(map[string]string{"op": "gte", "value": "many"})},
+		}}},
+		"non-string dimension value": {Advanced: &issueTableFilterNode{Children: []issueTableFilterNode{{Field: "priorities", Values: rawValues(1)}}}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			testutil.Call(t, testHandler.ListIssueTableRows,
@@ -201,12 +242,12 @@ func TestIssueTableRowsRejectsInvalidAdvancedAndDueDates(t *testing.T) {
 }
 
 func TestIssueTableFingerprintCanonicalizesAdvancedValues(t *testing.T) {
-	spec := func(values ...string) issueTableQuerySpec {
+	spec := func(values ...any) issueTableQuerySpec {
 		return issueTableQuerySpec{
 			Scope: issueTableScope{Kind: "workspace"},
 			Filters: issueTableFiltersRequest{Advanced: &issueTableFilterNode{
 				Match:    "any",
-				Children: []issueTableFilterNode{{Field: "priorities", Values: values}},
+				Children: []issueTableFilterNode{{Field: "priorities", Values: rawValues(values...)}},
 			}},
 			Sort: issueTableSortRequest{Field: "position", Direction: "asc"},
 		}
@@ -223,7 +264,11 @@ func TestIssueTableFingerprintCanonicalizesAdvancedValues(t *testing.T) {
 	if a != b {
 		t.Fatalf("value order changed the fingerprint: %s != %s", a, b)
 	}
-	if fmt.Sprint(original.Filters.Advanced.Children[0].Values) != "[urgent high urgent]" {
-		t.Fatalf("fingerprint mutated the request: %v", original.Filters.Advanced.Children[0].Values)
+	values := make([]string, 0, 3)
+	for _, raw := range original.Filters.Advanced.Children[0].Values {
+		values = append(values, string(raw))
+	}
+	if fmt.Sprint(values) != `["urgent" "high" "urgent"]` {
+		t.Fatalf("fingerprint mutated the request: %v", values)
 	}
 }

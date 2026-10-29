@@ -103,9 +103,13 @@ function filterMeaning(query: Record<string, unknown>): Record<string, unknown> 
   const tree = sanitizeAdvancedFilter(query.advancedFilter);
   if (!tree) return { ...query, advancedFilter: "" };
   const simple = simpleFromAdvancedFilter(tree);
-  const flatEmpty = NEGATABLE_FILTER_DIMENSIONS.every(
-    (dimension) => !filterDimensionHasSelection(query as unknown as FilterSnapshot, dimension),
-  );
+  const flatEmpty =
+    NEGATABLE_FILTER_DIMENSIONS.every(
+      (dimension) => !filterDimensionHasSelection(query as unknown as FilterSnapshot, dimension),
+    ) &&
+    Object.values((query.propertyFilters ?? {}) as Record<string, unknown[]>).every(
+      (values) => values.length === 0,
+    );
   if (simple && flatEmpty) return { ...query, ...simple, advancedFilter: "" };
   return { ...query, advancedFilter: advancedFilterSignature(tree) };
 }

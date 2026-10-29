@@ -336,10 +336,12 @@ export interface IssueTableFilterGroup {
 }
 
 export interface IssueTableFilterCondition {
-  field: IssueTableNegatableFilter;
+  /** A flat filter's field, or `property:<definitionId>`. */
+  field: IssueTableNegatableFilter | `property:${string}`;
   negate?: boolean;
-  /** Actors are `${type}:${id}`; assignees and project_ids accept "none". */
-  values: string[];
+  /** Actors are `${type}:${id}`; assignees and project_ids accept "none".
+   *  A property takes `filters.properties` members. */
+  values: PropertyFilterValue[];
 }
 
 export interface IssueTableFilters {

@@ -854,4 +854,36 @@ describe("advanced filter", () => {
     const tree = createFilterGroup("all", [createFilterCondition("project", ["p-1"])]);
     expect(ids(tree, { priorityFilters: ["high"] })).toEqual(["1"]);
   });
+
+  it("tests custom properties like any other field", () => {
+    const estimate = "prop-estimate";
+    const small = makeIssue({ id: "S", priority: "low", properties: { [estimate]: 1 } });
+    const big = makeIssue({ id: "B", priority: "low", properties: { [estimate]: 8 } });
+    const unset = makeIssue({ id: "U", priority: "urgent" });
+    const run = (tree: ReturnType<typeof createFilterGroup>) =>
+      filterIssues([small, big, unset], { ...NO_FILTER, advancedFilter: tree }).map((i) => i.id);
+    const field = `property:${estimate}` as const;
+
+    expect(run(createFilterGroup("all", [createFilterCondition(field, [{ op: "gte", value: "5" }])]))).toEqual(["B"]);
+    // "Is not" keeps issues without a value, like the simple dimensions.
+    expect(run(createFilterGroup("all", [createFilterCondition(field, [{ op: "gte", value: "5" }], true)]))).toEqual([
+      "S", "U",
+    ]);
+    expect(
+      run(
+        createFilterGroup("any", [
+          createFilterCondition(field, [NO_PROPERTY_VALUE]),
+          createFilterCondition(field, [{ op: "lte", value: "1" }]),
+        ]),
+      ),
+    ).toEqual(["S", "U"]);
+    expect(
+      run(
+        createFilterGroup("any", [
+          createFilterCondition(field, [{ op: "gte", value: "5" }]),
+          createFilterCondition("priority", ["urgent"]),
+        ]),
+      ),
+    ).toEqual(["B", "U"]);
+  });
 });

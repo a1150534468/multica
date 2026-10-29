@@ -26,9 +26,10 @@ describe("advanced filter mode", () => {
     expect(entered.statusFilters).toEqual([]);
     expect(entered.dueDateFilters).toEqual([]);
     expect(entered.negatedFilters).toEqual([]);
-    // Custom properties keep applying beside the tree.
-    expect(entered.propertyFilters).toEqual({ prop: ["opt"] });
-    expect(entered.advancedFilter?.children).toHaveLength(2);
+    // Custom properties become conditions like the rest.
+    expect(entered.propertyFilters).toEqual({});
+    expect(entered.advancedFilter?.children).toHaveLength(3);
+    expect(entered.advancedFilter?.children[2]).toMatchObject({ field: "property:prop", values: ["opt"] });
 
     store.getState().exitAdvancedFilter();
     const back = store.getState();
@@ -36,6 +37,7 @@ describe("advanced filter mode", () => {
     expect(back.statusFilters).toEqual(["done"]);
     expect(back.negatedFilters).toEqual(["status"]);
     expect(back.dueDateFilters).toEqual(["overdue"]);
+    expect(back.propertyFilters).toEqual({ prop: ["opt"] });
   });
 
   it("stays advanced when simple mode cannot say the tree", () => {
@@ -68,6 +70,18 @@ describe("advanced filter mode", () => {
     expect(merged.advancedFilter?.children[0]).toMatchObject({ field: "status", values: ["todo"], negated: false });
     expect(mergeViewStatePersisted({ advancedFilter: "junk" }, store.getState()).advancedFilter).toBeNull();
   });
+
+  it("folds property filters persisted beside a tree into it", () => {
+    const merged = mergeViewStatePersisted(
+      {
+        advancedFilter: { type: "group", match: "all", children: [{ type: "condition", field: "status", values: ["todo"] }] },
+        propertyFilters: { prop: ["opt"] },
+      },
+      store.getState(),
+    );
+    expect(merged.propertyFilters).toEqual({});
+    expect(merged.advancedFilter?.children[1]).toMatchObject({ field: "property:prop", values: ["opt"] });
+  });
 });
 
 describe("saved views in advanced mode", () => {
@@ -87,6 +101,15 @@ describe("saved views in advanced mode", () => {
     store.getState().enterAdvancedFilter();
     expect(isIssueViewModified(view, store.getState()).filters).toBe(false);
     expect(modifiedFilterDimensions(view, store.getState()).size).toBe(0);
+  });
+
+  it("does not count property filters moving into the tree as a change", () => {
+    const withProperty = { query: { ...view.query, propertyFilters: { prop: ["opt"] } }, display: {} };
+    const store = openView(withProperty);
+    store.getState().enterAdvancedFilter();
+    expect(store.getState().propertyFilters).toEqual({});
+    expect(isIssueViewModified(withProperty, store.getState()).filters).toBe(false);
+    expect(modifiedFilterDimensions(withProperty, store.getState()).size).toBe(0);
   });
 
   it("reports a tree simple mode cannot say as an advanced change", () => {

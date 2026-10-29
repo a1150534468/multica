@@ -137,7 +137,7 @@ test.describe("Issue filter: search, due date, advanced", () => {
     await expect.poll(() => visibleIssueTitles(page, all)).toEqual([lowLate, mediumLate, urgentLate].sort());
   });
 
-  test("advanced mode shows and clears property filters", async ({ page }) => {
+  test("custom properties are conditions like any other field", async ({ page }) => {
     const property = await api.createProperty(`Estimate ${suffix}`, "number");
     await page.reload();
     await expect.poll(() => visibleIssueTitles(page, all)).toEqual([...all].sort());
@@ -151,19 +151,23 @@ test.describe("Issue filter: search, due date, advanced", () => {
     await page.getByRole("menuitemcheckbox", { name: "Urgent" }).click();
     await page.keyboard.press("Escape");
 
-    await panel.getByRole("button", { name: "Add property filter" }).click();
+    await panel.getByRole("button", { name: "Add condition", exact: true }).click();
+    await expect(page.getByRole("menuitem", { name: property.name })).toBeVisible();
+    await shot(page, "05-advanced-field-picker");
     await page.getByRole("menuitem", { name: property.name }).click();
+    await panel.getByRole("button", { name: "Values" }).nth(1).click();
     await page.getByRole("menuitemcheckbox", { name: "No value" }).click();
     await page.keyboard.press("Escape");
-    await page.keyboard.press("Escape");
 
-    const row = panel.getByTestId("advanced-property-row");
-    await expect(row).toContainText(property.name);
+    const rows = panel.getByTestId("advanced-filter-row");
+    await expect(rows).toHaveCount(2);
+    await expect(rows.nth(1)).toContainText(property.name);
+    await expect(panel.getByRole("button", { name: "Add property filter" })).toHaveCount(0);
     await expect.poll(() => visibleIssueTitles(page, all)).toEqual([urgentLate, urgentUndated].sort());
-    await shot(page, "05-advanced-properties");
+    await shot(page, "06-advanced-properties");
 
     await panel.getByRole("button", { name: "Clear all" }).click();
-    await expect(row).toBeHidden();
+    await expect(rows).toHaveCount(0);
     await expect(panel.getByRole("button", { name: "Clear all" })).toBeDisabled();
     await expect.poll(() => visibleIssueTitles(page, all)).toEqual([...all].sort());
   });

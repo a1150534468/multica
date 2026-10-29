@@ -7,6 +7,8 @@ import type {
 import {
   dueDateMatches,
   FILTER_NONE_VALUE,
+  isPropertyCondition,
+  propertyIdOfField,
   type AdvancedFilterCondition,
   type AdvancedFilterGroup,
   type DueDateFilter,
@@ -405,8 +407,13 @@ function issueMatchesFilterCondition(
   context: IssueFilterContext,
   today: string,
 ): boolean | undefined {
+  if (condition.values.length === 0) return undefined;
+  if (isPropertyCondition(condition)) {
+    const propertyId = propertyIdOfField(condition.field) ?? "";
+    const matched = issueMatchesPropertyFilters(issue, { [propertyId]: condition.values });
+    return condition.negated ? !matched : matched;
+  }
   const { values } = condition;
-  if (values.length === 0) return undefined;
   const actorMatches = (type: string | null, id: string | null) =>
     !!id && values.includes(`${type}:${id}`);
   let matched: boolean;

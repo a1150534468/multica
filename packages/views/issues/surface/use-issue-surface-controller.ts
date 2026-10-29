@@ -25,7 +25,8 @@ import {
   advancedFilterUsesField,
   FILTER_DIMENSION_TABLE_FIELD,
   statusColumnFilter,
-  withoutAdvancedFilterFields,
+  propertyIdOfField,
+  withoutAdvancedFilterConditions,
 } from "@multica/core/issues/stores/filter-tree";
 import type { IssueSortParam } from "@multica/core/issues/queries";
 import { issueTableFacetsOptions } from "@multica/core/issues/queries";
@@ -272,16 +273,29 @@ export function useIssueSurfaceController({
   // A "my issues" surface already scopes by relation; the menu hides the
   // dimension there, and a persisted value must not silently narrow it.
   const relationFilters = scope.type === "my" ? EMPTY_LIST : storedRelationFilters;
-  // The same rule for the rule tree, and a project surface already fixes the
-  // project. Pruned: empty rows the panel is still editing filter nothing.
-  const advancedFilter = useMemo(
-    () =>
-      withoutAdvancedFilterFields(storedAdvancedFilter, [
-        ...(scope.type === "my" ? (["relation"] as const) : []),
-        ...(scope.type === "project" ? (["project"] as const) : []),
-      ]),
-    [scope.type, storedAdvancedFilter],
+  // Active property catalog. Persisted view state can outlive definitions
+  // (archive/delete): filters keyed by a non-active definition are stripped
+  // before they reach the predicates, and a sort on a non-active definition
+  // degrades to manual order — matching what the header already shows.
+  const { data: workspaceProperties = EMPTY_LIST, isSuccess: catalogSettled } = useQuery(propertyListOptions(wsId));
+  const activePropertyIds = useMemo(
+    () => new Set(workspaceProperties.map((p) => p.id)),
+    [workspaceProperties],
   );
+  // The same rule for the rule tree, and a project surface already fixes the
+  // project; conditions on a non-active property go like flat ones do.
+  // Pruned: empty rows the panel is still editing filter nothing.
+  const advancedFilter = useMemo(() => {
+    const fixed: readonly string[] = [
+      ...(scope.type === "my" ? ["relation"] : []),
+      ...(scope.type === "project" ? ["project"] : []),
+    ];
+    return withoutAdvancedFilterConditions(storedAdvancedFilter, (condition) => {
+      if (fixed.includes(condition.field)) return true;
+      const propertyId = propertyIdOfField(condition.field);
+      return propertyId !== null && catalogSettled && !activePropertyIds.has(propertyId);
+    });
+  }, [activePropertyIds, catalogSettled, scope.type, storedAdvancedFilter]);
   // Columns follow a status the tree requires as they follow the simple one.
   const columnStatus = useMemo(
     () => statusColumnFilter(statusFilters, statusNegated, advancedFilter, hiddenStatusKeys),
@@ -337,15 +351,6 @@ export function useIssueSurfaceController({
   const dateParams = useMemo(
     () => issueDateFilterToApiParams(dateFilter),
     [dateFilter],
-  );
-  // Active property catalog. Persisted view state can outlive definitions
-  // (archive/delete): filters keyed by a non-active definition are stripped
-  // before they reach the predicates, and a sort on a non-active definition
-  // degrades to manual order — matching what the header already shows.
-  const { data: workspaceProperties = EMPTY_LIST, isSuccess: catalogSettled } = useQuery(propertyListOptions(wsId));
-  const activePropertyIds = useMemo(
-    () => new Set(workspaceProperties.map((p) => p.id)),
-    [workspaceProperties],
   );
   const effectivePropertyFilters = useMemo(() => {
     // While the catalog is still loading (or errored), persisted filters are

@@ -2,7 +2,6 @@
 
 import { useIssueStatuses } from "@multica/core/issue-statuses/hooks";
 import { useStatusLabel } from "../utils/status-label";
-import { NO_PROPERTY_VALUE } from "../utils/filter";
 import { useMemo, type ReactNode } from "react";
 import {
   CalendarClock,
@@ -28,7 +27,7 @@ import { projectListOptions } from "@multica/core/projects/queries";
 import { PROJECT_STATUS_CONFIG } from "@multica/core/projects/config";
 import { labelListOptions } from "@multica/core/labels/queries";
 import { propertyListOptions } from "@multica/core/properties";
-import { isActorPropertyType, isListPropertyType, isScalarPropertyType, parseActorRef, propertyFilterValueKey, PROPERTY_FILTER_OP_SYMBOLS, type PropertyFilterValue } from "@multica/core/types";
+import { isActorPropertyType, parseActorRef, propertyFilterValueKey, type PropertyFilterValue } from "@multica/core/types";
 import {
   type ActorFilterValue,
   type FilterDimension,
@@ -46,6 +45,7 @@ import {
   countAdvancedConditions,
 } from "@multica/core/issues/stores/filter-tree";
 import { DUE_DATE_LABEL_KEY, RELATION_LABEL_KEY } from "./filter-field-options";
+import { usePropertyValueName } from "./property-filter-options";
 import { StatusIcon } from "./status-icon";
 import { PriorityIcon } from "./priority-icon";
 import { ActorAvatar } from "../../common/actor-avatar";
@@ -80,7 +80,7 @@ export function FilterOperator({ negated }: { negated?: boolean }) {
   );
 }
 
-function summarize(names: (string | undefined)[]): string {
+export function summarize(names: (string | undefined)[]): string {
   const first = names.find((n): n is string => !!n);
   if (first === undefined) return String(names.length);
   const rest = names.length - 1;
@@ -287,6 +287,7 @@ export function useFilterChips(
     () => buildChipActorNames(members, agents, squads),
     [members, agents, squads],
   );
+  const propertyValueName = usePropertyValueName(actorName);
 
   // Inside a saved view chips show only the user's additions ON TOP of the
   // view; removing one returns the dimension to the view's values (never
@@ -580,7 +581,7 @@ export function useFilterChips(
       value: t(($) => $.filters.advanced_conditions, { count: advancedConditions }),
       onRemove: () => {
         const s = store.getState();
-        if (baseline) s.resetFiltersTo({ ...baseline.raw, propertyFilters: s.propertyFilters });
+        if (baseline) s.resetFiltersTo(baseline.raw);
         else s.setAdvancedFilter(null);
       },
     });
@@ -595,41 +596,9 @@ export function useFilterChips(
     // references, so names come from the directory and the icons are avatars.
     const actorProperty = isActorPropertyType(definition.type);
     const actorValues = actorProperty ? actorFilterValues(selected) : [];
-    const optionName = (member: PropertyFilterValue): string | undefined => {
-      if (member === NO_PROPERTY_VALUE) {
-        return t(($) => $.pickers.custom_property.none);
-      }
-      // Scalar operator members summarize with their operator; the comparison
-      // symbols are locale-independent, the word ops get chip phrases.
-      if (typeof member === "object") {
-        if (member.op === "contains") {
-          return t(($) => $.filters.chip_op_contains, { value: member.value });
-        }
-        if (member.op === "before") {
-          return t(($) => $.filters.chip_op_before, { value: member.value });
-        }
-        if (member.op === "after") {
-          return t(($) => $.filters.chip_op_after, { value: member.value });
-        }
-        const symbol = PROPERTY_FILTER_OP_SYMBOLS[member.op] ?? member.op;
-        return `${symbol} ${member.value}`;
-      }
-      if (actorProperty) {
-        const ref = parseActorRef(member);
-        return ref ? actorName({ type: ref.kind, id: ref.id }) : undefined;
-      }
-      if (definition.type === "checkbox") {
-        return member === "true"
-          ? t(($) => $.pickers.custom_property.true_label)
-          : t(($) => $.pickers.custom_property.false_label);
-      }
-      // Scalar and list properties have no option list — the filter value IS
-      // the label (for lists it is one matched element).
-      if (isScalarPropertyType(definition.type) || isListPropertyType(definition.type)) {
-        return member;
-      }
-      return definition.config.options?.find((o) => o.id === member)?.name;
-    };
+    const optionName = (member: PropertyFilterValue) =>
+      propertyValueName(definition, member);
+
     const optionColors =
       definition.type === "checkbox" || actorProperty
         ? []
