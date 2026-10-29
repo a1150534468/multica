@@ -1703,7 +1703,7 @@ export function IssueFilterMenu({
                 autoFocus
               />
             </div>
-            <div className="max-h-[min(70vh,36rem)] overflow-y-auto p-1">{menuBody}</div>
+            <div className="max-h-[min(70vh,36rem)] overflow-x-hidden overflow-y-auto p-1">{menuBody}</div>
           </DropdownMenuContent>
     </DropdownMenu>
   );
