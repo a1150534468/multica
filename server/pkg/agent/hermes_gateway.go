@@ -2,9 +2,12 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -36,11 +39,26 @@ func StopHermesTaskGateway(cfg Config, home string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	cmd := cfg.commandAt(cfg.ExecutablePath).exec(ctx, "--profile", "default", "gateway", "stop")
-	hideAgentWindow(cmd)
-	cmd.Env = buildEnv(cfg.Env)
-	cmd.Env = append(cmd.Env, "HERMES_DISABLE_LAZY_INSTALLS=1")
-	if _, err := combinedOutputOwned(cmd, cfg.Logger); err != nil {
+	stop := func(interrupt bool) ([]byte, error) {
+		args := []string{"--profile", "default", "gateway", "stop"}
+		if interrupt {
+			args = append(args, "--yes")
+		}
+		cmd := cfg.commandAt(cfg.ExecutablePath).exec(ctx, args...)
+		hideAgentWindow(cmd)
+		cmd.Env = buildEnv(cfg.Env)
+		cmd.Env = append(cmd.Env, "HERMES_DISABLE_LAZY_INSTALLS=1")
+		return combinedOutputOwned(cmd, cfg.Logger)
+	}
+	output, err := stop(true)
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) && exitErr.ExitCode() == 2 &&
+		strings.HasSuffix(strings.TrimSpace(string(output)), "error: unrecognized arguments: --yes") {
+		// Old in-process ACP has no interrupt flag. A downgraded conversation
+		// can retain a gateway lock from a newer release; only retry parser errors.
+		_, err = stop(false)
+	}
+	if err != nil {
 		return fmt.Errorf("stop task Hermes gateway: %w", err)
 	}
 	return nil

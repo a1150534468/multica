@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -35,15 +36,33 @@ func TestHermesManagedHomeRealACP(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("%s", version)
+	const liveTurnPrompt = "Hold this cancelled turn until interrupted. Return alpha without tools."
+	var holdRequests atomic.Bool
+	activeRequest := make(chan struct{}, 1)
+	releaseRequests := make(chan struct{})
 	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method == http.MethodGet {
 			fmt.Fprint(w, `{"object":"list","data":[{"id":"fixture-model","object":"model"}]}`)
 			return
 		}
-		var request struct{ Stream bool }
+		var request struct {
+			Stream   bool
+			Messages json.RawMessage
+		}
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 			t.Error(err)
+			return
+		}
+		if holdRequests.Load() && strings.Contains(string(request.Messages), liveTurnPrompt) {
+			select {
+			case activeRequest <- struct{}{}:
+			default:
+			}
+			select {
+			case <-releaseRequests:
+			case <-r.Context().Done():
+			}
 			return
 		}
 		if request.Stream {
@@ -54,6 +73,7 @@ func TestHermesManagedHomeRealACP(t *testing.T) {
 		fmt.Fprint(w, `{"id":"fixture","object":"chat.completion","created":1,"model":"fixture-model","choices":[{"index":0,"message":{"role":"assistant","content":"alpha"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":1,"total_tokens":11}}`)
 	}))
 	defer model.Close()
+	defer close(releaseRequests)
 	occupied, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -155,4 +175,103 @@ func TestHermesManagedHomeRealACP(t *testing.T) {
 			sessionID = result.SessionID
 		}()
 	}
+	t.Run("legacy_gateway_record", func(t *testing.T) {
+		if _, err := os.Stat(filepath.Join(store, "gateway_state.json")); err == nil {
+			t.Skip("gateway-backed ACP supports the interrupt flag")
+		} else if !os.IsNotExist(err) {
+			t.Fatal(err)
+		}
+		// A conversation used by a newer release may retain a stale lock after
+		// downgrading to in-process ACP, whose CLI rejects gateway stop --yes.
+		mustWrite(t, filepath.Join(store, "gateway.lock"), "")
+		cfg := agent.Config{ExecutablePath: cli, Logger: slog.Default(),
+			Env: map[string]string{"HOME": t.TempDir(), "HERMES_HOME": store}}
+		if err := agent.StopHermesTaskGateway(cfg, store); err != nil {
+			t.Fatalf("clean up a retained gateway record with an older CLI: %v", err)
+		}
+	})
+	t.Run("interrupt_live_turn", func(t *testing.T) {
+		if _, err := os.Stat(filepath.Join(store, "gateway_state.json")); os.IsNotExist(err) {
+			t.Skip("in-process ACP has no detached gateway")
+		} else if err != nil {
+			t.Fatal(err)
+		}
+		holdRequests.Store(true)
+		user := t.TempDir()
+		cfg := agent.Config{ExecutablePath: cli, Logger: slog.Default(), BuiltinRuntime: true,
+			Env: map[string]string{"HOME": user, "HERMES_HOME": store,
+				"HERMES_DISABLE_LAZY_INSTALLS": "1", "HERMES_ACP_SKIP_CONFIGURED_MCP": "1",
+				"OPENAI_API_KEY": "local-fixture-key", "OPENAI_BASE_URL": model.URL + "/v1"}}
+		gatewayStop := func(interrupt bool) ([]byte, error) {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			args := []string{"--profile", "default", "gateway", "stop"}
+			if interrupt {
+				args = append(args, "--yes")
+			}
+			cmd := exec.CommandContext(ctx, cli, args...)
+			cmd.Env = os.Environ()
+			for key, value := range cfg.Env {
+				cmd.Env = append(cmd.Env, key+"="+value)
+			}
+			return cmd.CombinedOutput()
+		}
+		// Cleanup must also work when the regression assertion fails before the
+		// production stop helper is fixed; no detached gateway may outlive this test.
+		defer func() {
+			if output, err := gatewayStop(true); err != nil {
+				t.Errorf("forced fixture cleanup failed: %v: %s", err, output)
+			}
+		}()
+		backend, err := agent.New("hermes", cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		defer cancel()
+		session, err := backend.Execute(ctx, liveTurnPrompt, agent.ExecOptions{Cwd: user, ResumeSessionID: sessionID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		drained := make(chan struct{})
+		go func() {
+			defer close(drained)
+			for range session.Messages {
+			}
+		}()
+		select {
+		case <-activeRequest:
+		case <-time.After(45 * time.Second):
+			t.Fatal("Hermes never started the blocked model request")
+		}
+		// Killing the ACP client does not stop the detached owner or its worker.
+		cancel()
+		select {
+		case result := <-session.Result:
+			if result.Status != "aborted" {
+				t.Fatalf("cancelled ACP result = %+v", result)
+			}
+		case <-time.After(15 * time.Second):
+			t.Fatal("cancelled ACP client did not exit")
+		}
+		<-drained
+		// Prove this is still a live turn, not an idle-gateway cleanup test.
+		if output, err := gatewayStop(false); err == nil || !strings.Contains(string(output), "Refusing to stop the gateway") {
+			t.Fatalf("expected refusal for live work without --yes: err=%v output=%s", err, output)
+		}
+		if err := agent.StopHermesTaskGateway(cfg, store); err != nil {
+			t.Fatalf("stop detached gateway with cancelled live turn: %v", err)
+		}
+		data, err := os.ReadFile(filepath.Join(store, "gateway_state.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var state struct {
+			State        string `json:"gateway_state"`
+			ActiveAgents int    `json:"active_agents"`
+		}
+		if err := json.Unmarshal(data, &state); err != nil || state.State != "stopped" || state.ActiveAgents != 0 {
+			t.Fatalf("gateway still has live work: state=%+v err=%v", state, err)
+		}
+	})
 }

@@ -43,6 +43,8 @@ func prepareHermesGatewayState(home string) error {
 // Explicit false survives credentials from both dotenv and the process env in
 // old and gateway-backed Hermes. Include env-only bundled platforms, as well as
 // every platform configured by the user, including third-party plugins.
+// When validating a new Hermes release, check gateway.config.Platform and
+// plugins/platforms for new env-only adapters and update this list.
 var hermesGatewayPlatforms = []string{
 	"local", "telegram", "discord", "whatsapp", "whatsapp_cloud", "slack",
 	"signal", "mattermost", "matrix", "email", "sms", "dingtalk", "api_server",
