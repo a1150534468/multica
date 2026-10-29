@@ -31,7 +31,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@multica/ui/components/ui/dropdown-menu";
-import { Popover, PopoverContent, PopoverTrigger } from "@multica/ui/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverDescription,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@multica/ui/components/ui/popover";
 import { ActorAvatar } from "../common/actor-avatar";
 import { matchesPinyin } from "../editor/extensions/pinyin-match";
 import { StatusIcon } from "../issues/components/status-icon";
@@ -319,10 +325,10 @@ function WorkflowUsage({ name, projects, isDefault }: { name: string; projects: 
       </PopoverTrigger>
       <PopoverContent align="end" className="w-80 gap-0 p-0">
         <div className="flex min-w-0 items-baseline gap-1.5 px-3 pb-2 pt-3">
-          <span className="truncate text-label font-semibold">{name}</span>
-          <span className="shrink-0 text-caption text-muted-foreground">
+          <PopoverTitle className="truncate text-label font-semibold">{name}</PopoverTitle>
+          <PopoverDescription className="shrink-0 text-caption">
             {t(($) => $.workflows.settings.projects, { count: sorted.length })}
-          </span>
+          </PopoverDescription>
         </div>
         {sorted.length >= USAGE_FILTER_MIN && (
           <div className="relative mx-2 mb-1">

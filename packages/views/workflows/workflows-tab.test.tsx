@@ -89,6 +89,9 @@ describe("WorkflowsTab list (MUL-8377)", () => {
 
     fireEvent.click(trigger);
     const filter = await screen.findByRole("textbox", { name: "Filter projects" });
+    const dialog = screen.getByRole("dialog", { name: "Default" });
+    expect(dialog.getAttribute("aria-describedby")).toBeTruthy();
+    expect(document.getElementById(dialog.getAttribute("aria-describedby")!)?.textContent).toBe("25 projects");
     expect(screen.getAllByRole("link").filter((a) => a.getAttribute("href")?.startsWith("/acme/projects/"))).toHaveLength(25);
     expect(screen.getByText("Also applies to issues without a project")).toBeTruthy();
 
