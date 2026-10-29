@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Search, Settings, Users, type IconComponent } from "@multica/ui/icons";
+import { Settings, Users, type IconComponent } from "@multica/ui/icons";
 import { useChatStore } from "@multica/core/chat";
 import { chatSessionsOptions } from "@multica/core/chat/queries";
 import { countUnreadChatMessages } from "@multica/core/chat/unread";
@@ -14,17 +14,15 @@ import {
   type AppSpaceId,
   type RailSpaceId,
 } from "@multica/core/paths";
-import { useShortcut } from "@multica/core/shortcuts";
 import { TooltipHint } from "@multica/ui/components/common/tooltip-hint";
 import { CappedNumberFlow } from "@multica/ui/components/ui/number-flow";
 import { cn } from "@multica/ui/lib/utils";
-import { ShortcutKeycaps } from "../common/shortcut-keycaps";
 import { useAppForeground } from "../common/use-app-foreground";
 import { useT } from "../i18n";
 import { AppLink, useNavigation } from "../navigation";
-import { useSearchStore } from "../search/search-store";
 import { AccountMenu } from "./account-menu";
 import { useAppShell } from "./app-shell-context";
+import { NewIssueButton, SearchButton } from "./global-actions";
 import { HelpLauncher } from "./help-launcher";
 import { isPathWithin } from "./panel-nav";
 import { useFailingAutopilots } from "./panels/autopilots-panel";
@@ -161,33 +159,21 @@ function RailSpaceLink({
   );
 }
 
-function RailSearch() {
-  const { t } = useT("search");
-  const shortcut = useShortcut("openSearch");
-  return (
-    <TooltipHint
-      label={t(($) => $.trigger.label)}
-      shortcut={shortcut ? <ShortcutKeycaps shortcut={shortcut} decorative className="ml-1.5" /> : null}
-      side="right"
-    >
-      <button
-        type="button"
-        aria-label={t(($) => $.trigger.label)}
-        onClick={() => useSearchStore.getState().setOpen(true)}
-        className={RAIL_ICON_BUTTON_CLASS}
-      >
-        <Search />
-      </button>
-    </TooltipHint>
-  );
-}
-
 /**
- * The app rail: workspaces, search, the five spaces, then help, settings and
- * the account. It sits on the app shell, outside the content card, and stays
- * put while the panel beside it collapses.
+ * The app rail: workspaces, New issue and search, the five spaces, then help,
+ * settings and the account. It sits on the app shell, outside the content
+ * card, and stays put while the panel beside it collapses. Desktop passes
+ * `globalActions={false}`: its title bar carries New issue and search.
  */
-export function AppRail({ topSlot, className }: { topSlot?: React.ReactNode; className?: string }) {
+export function AppRail({
+  topSlot,
+  globalActions = true,
+  className,
+}: {
+  topSlot?: React.ReactNode;
+  globalActions?: boolean;
+  className?: string;
+}) {
   const { t } = useT("layout");
   const p = useWorkspacePaths();
   const shell = useAppShell();
@@ -239,9 +225,14 @@ export function AppRail({ topSlot, className }: { topSlot?: React.ReactNode; cla
     >
       {topSlot}
       <RailWorkspaces />
-      <div className="my-2">
-        <RailSearch />
-      </div>
+      {globalActions ? (
+        <div className="my-2 flex flex-col items-center gap-1">
+          <NewIssueButton className={RAIL_ICON_BUTTON_CLASS} tooltipSide="right" />
+          <SearchButton className={RAIL_ICON_BUTTON_CLASS} tooltipSide="right" />
+        </div>
+      ) : (
+        <div className="h-2 shrink-0" />
+      )}
       <ul className="flex flex-col items-center gap-0.5">
         {RAIL_SPACES.map((id) => (
           <RailSpaceLink

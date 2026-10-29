@@ -80,7 +80,7 @@ function CollapseButton() {
   );
 }
 
-function renderRail(children?: ReactNode) {
+function renderRail(children?: ReactNode, rail: ReactNode = <AppRail />) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
@@ -89,7 +89,7 @@ function renderRail(children?: ReactNode) {
     <QueryClientProvider client={client}>
       <SidebarProvider>
         <AppShellProvider>
-          <AppRail />
+          {rail}
           <CollapseButton />
           {children}
         </AppShellProvider>
@@ -109,6 +109,20 @@ beforeEach(() => {
   state.chat = { activeSessionId: null, isOpen: false };
   state.stuck = [];
   state.failingAutopilots = [];
+});
+
+describe("AppRail global actions", () => {
+  it("carries New issue and search by default", () => {
+    renderRail();
+    expect(screen.getByRole("button", { name: /^new issue$/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Search..." })).toBeTruthy();
+  });
+
+  it("leaves them to the desktop title bar when turned off", () => {
+    renderRail(undefined, <AppRail globalActions={false} />);
+    expect(screen.queryByRole("button", { name: /^new issue$/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Search..." })).toBeNull();
+  });
 });
 
 describe("AppRail spaces", () => {

@@ -2,20 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { SquarePen } from "@multica/ui/icons";
-import { IconButton } from "@multica/ui/components/common/icon-button";
 import { useAuthStore } from "@multica/core/auth";
 import { useCurrentWorkspace, useWorkspacePaths } from "@multica/core/paths";
-import { useIssueDraftStore } from "@multica/core/issues/stores/draft-store";
-import { openCreateIssueWithPreference } from "@multica/core/issues/stores/create-mode-store";
 import { issueDetailOptions } from "@multica/core/issues/queries";
 import { projectSidebarSource, sidebarProjects } from "@multica/core/issues/sidebar-list";
 import { useSidebarTreeStore } from "@multica/core/issues/stores/sidebar-tree-store";
 import { projectListOptions } from "@multica/core/projects/queries";
-import { useShortcut } from "@multica/core/shortcuts";
 import type { Project } from "@multica/core/types";
 import { useNavigation } from "../../navigation";
-import { ShortcutKeycaps } from "../../common/shortcut-keycaps";
 import { useT } from "../../i18n";
 import { PanelBody, PanelHeader } from "../panel-nav";
 import { PinnedSection, usePanelPins } from "./pinned-section";
@@ -31,19 +25,12 @@ function issueRouteSegment(pathname: string, issuesPath: string): string | null 
   return segment ? decodeURIComponent(segment) : null;
 }
 
-function DraftDot() {
-  const hasDraft = useIssueDraftStore((s) => s.hasDraft());
-  if (!hasDraft) return null;
-  return <span className="absolute -top-0.5 -right-0.5 size-1.5 rounded-full bg-brand" />;
-}
-
 export function WorkPanel() {
   const { t } = useT("layout");
   const p = useWorkspacePaths();
   const { pathname } = useNavigation();
   const wsId = useCurrentWorkspace()?.id;
   const userId = useAuthStore((s) => s.user?.id);
-  const createIssueShortcut = useShortcut("createIssue");
 
   const { data: projects = EMPTY_PROJECTS } = useQuery({
     ...projectListOptions(wsId ?? ""),
@@ -96,22 +83,7 @@ export function WorkPanel() {
 
   return (
     <>
-      <PanelHeader title={t(($) => $.spaces.work)}>
-        <IconButton
-          label={t(($) => $.sidebar.new_issue)}
-          shortcut={
-            createIssueShortcut ? <ShortcutKeycaps shortcut={createIssueShortcut} decorative /> : undefined
-          }
-          tooltipSide="bottom"
-          className="text-muted-foreground"
-          onClick={() => openCreateIssueWithPreference()}
-        >
-          <span className="relative">
-            <SquarePen />
-            <DraftDot />
-          </span>
-        </IconButton>
-      </PanelHeader>
+      <PanelHeader title={t(($) => $.spaces.work)} />
       <PanelBody onClickCapture={rememberClickedIssue}>
         {wsId && (
           <ViewsSection
