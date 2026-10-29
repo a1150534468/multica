@@ -14,7 +14,12 @@
     "you": "You",
     "channels": "Channels",
     "add_channel": "New channel",
-    "archived_agents": "Archived ({{count}})"
+    "archived_agents": "Archived ({{count}})",
+    "jump_to": "Jump to…",
+    "new": "New",
+    "more": "{{count}} more",
+    "show_less": "Show less",
+    "invited": "Invited"
   },
   "tabs": {
     "chat": "Chat",
@@ -24,13 +29,32 @@
   "detail": {
     "tabs_aria": "Sections",
     "toggle_panel": "Toggle details",
-    "not_found": "This item no longer exists or you don't have access to it."
+    "not_found": "This item no longer exists or you don't have access to it.",
+    "copy_link": "Copy link",
+    "link_copied": "Link copied",
+    "copied": "Copied"
   },
   "agent": {
-    "assign_issue": "Assign issue"
+    "assign_issue": "Assign issue",
+    "archive": "Archive agent"
   },
   "squad": {
-    "assign_issue": "Assign issue"
+    "assign_issue": "Assign issue",
+    "working_one": "{{count}} working",
+    "working_other": "{{count}} working",
+    "work_note": "Issues assigned to the squad go to {{name}} first, who routes them to the right member.",
+    "members": "Members",
+    "leader": "Leader",
+    "created_by": "Created by",
+    "how_it_works": "How work flows",
+    "how_it_works_body": "Assign an issue to the squad and {{name}} picks it up, splits it if needed and hands each part to a member. Progress shows up on the issue.",
+    "member_status": {
+      "working": "Working",
+      "idle": "Idle",
+      "offline": "Offline",
+      "unstable": "Unstable",
+      "archived": "Archived"
+    }
   },
   "member": {
     "dm_placeholder": "Message {{name}}",
@@ -41,7 +65,13 @@
       "owner": "Owner",
       "admin": "Admin",
       "member": "Member"
-    }
+    },
+    "copy_email": "Copy email",
+    "email": "Email",
+    "role_label": "Role",
+    "joined": "Joined",
+    "agents": "Agents",
+    "squads": "Squads"
   },
   "panel": {
     "now": "Now",
@@ -54,12 +84,17 @@
     "squad": "Squad",
     "leader": "Leader",
     "earlier": "Earlier conversations",
-    "unread": "Unread"
+    "unread": "Unread",
+    "status": "Status",
+    "idle_note": "Idle — assign it an issue or message it.",
+    "offline_note": "Offline — its runtime isn't connected, so work waits until it is.",
+    "replying_in_chat": "Replying in chat",
+    "queued": "Queued:",
+    "chat_reply": "a chat reply",
+    "now_counts": "{{running}} running · {{queued}} queued"
   },
   "channel": {
     "private": "Private",
-    "members_count_one": "{{count}} member",
-    "members_count_other": "{{count}} members",
     "members_title": "Members of #{{name}}",
     "add_members": "Add people or agents",
     "remove": "Remove",
@@ -73,19 +108,37 @@
     "agents_hint": "Agents in the channel reply when you @mention them, and keep replying in the thread they answered.",
     "not_found": "This channel doesn't exist or you don't have access to it.",
     "create": {
-      "title": "New channel",
+      "title": "Create a channel",
       "name": "Name",
-      "name_placeholder": "e.g. launch",
-      "about": "Topic",
-      "about_placeholder": "What is this channel for? (optional)",
-      "private": "Make private",
-      "private_hint": "Only people added can find and read it. Public channels are open to everyone in the workspace.",
+      "name_placeholder": "e.g. release-0.9",
+      "about": "Purpose",
+      "about_placeholder": "What is this channel about?",
+      "private_hint": "Only members can see it. Agents in it never carry its content elsewhere.",
       "agents": "Agents",
       "people": "People",
       "submit": "Create channel",
       "failed": "Couldn't create the channel",
-      "name_taken": "A channel with this name already exists"
-    }
+      "name_taken": "A channel with this name already exists",
+      "description": "A shared place for people and agents to talk about one topic. Agents reply when you @mention them.",
+      "optional": "Optional",
+      "members": "Members",
+      "members_count_one": "{{count}} including you",
+      "members_count_other": "{{count}} including you",
+      "no_matches": "No matches",
+      "visibility": "Visibility",
+      "public_hint": "Anyone in the workspace can find and join it.",
+      "privacy_note": "Agents never see anyone's private chats here",
+      "cancel": "Cancel"
+    },
+    "public": "Public",
+    "about": "About",
+    "no_about": "No purpose set.",
+    "people": "People",
+    "agents": "Agents",
+    "settings": "Settings",
+    "visibility": "Visibility",
+    "mention_hint": "Agents in this channel reply when you @mention them",
+    "no_mention_note": "Only visible to you: no agent was mentioned, so none will reply."
   },
   "conversation": {
     "replying": "{{name}} is replying…",
@@ -95,7 +148,7 @@
     "agent_badge": "Agent",
     "thread_placeholder": "Reply…",
     "thread_empty": "Replies stay under this message.",
-    "back": "Back"
+    "new_messages": "New"
   },
   "chat": {
     "untitled": "Untitled",
@@ -116,18 +169,26 @@
     "archived_no_chat": "{{name}} is archived and has no conversation with you.",
     "thread": {
       "title": "Thread",
-      "back": "Back to conversation",
-      "root_label": "Replying to",
       "empty": "Replies here stay with this message. {{name}} sees the message you're replying to.",
       "reply": "Reply in thread",
       "replies_one": "{{count}} reply",
       "replies_other": "{{count}} replies",
-      "open_failed": "Couldn't open the thread"
+      "open_failed": "Couldn't open the thread",
+      "last_reply": "Last reply {{time}}",
+      "in": "in {{name}}",
+      "close": "Close thread"
     },
     "issue": {
       "create": "Create issue",
       "created": "Created {{identifier}} and assigned it to {{name}}",
       "create_failed": "Couldn't create the issue"
     }
+  },
+  "status": {
+    "archived": "Archived",
+    "offline": "Offline",
+    "working": "Working",
+    "waiting": "Waiting",
+    "idle": "Idle"
   }
 }

@@ -14,7 +14,12 @@
     "you": "Vous",
     "channels": "Canaux",
     "add_channel": "Nouveau canal",
-    "archived_agents": "Archivés ({{count}})"
+    "archived_agents": "Archivés ({{count}})",
+    "jump_to": "Aller à…",
+    "new": "Nouveau",
+    "more": "{{count}} de plus",
+    "show_less": "Afficher moins",
+    "invited": "Invité"
   },
   "tabs": {
     "chat": "Discussion",
@@ -24,13 +29,32 @@
   "detail": {
     "tabs_aria": "Sections",
     "toggle_panel": "Afficher ou masquer les détails",
-    "not_found": "Cet élément n'existe plus ou vous n'y avez pas accès."
+    "not_found": "Cet élément n'existe plus ou vous n'y avez pas accès.",
+    "copy_link": "Copier le lien",
+    "link_copied": "Lien copié",
+    "copied": "Copié"
   },
   "agent": {
-    "assign_issue": "Assigner une tâche"
+    "assign_issue": "Assigner une tâche",
+    "archive": "Archiver l'agent"
   },
   "squad": {
-    "assign_issue": "Assigner une tâche"
+    "assign_issue": "Assigner une tâche",
+    "working_one": "{{count}} en cours",
+    "working_other": "{{count}} en cours",
+    "work_note": "Les tickets assignés à la squad passent d'abord par {{name}}, qui les confie au bon membre.",
+    "members": "Membres",
+    "leader": "Responsable",
+    "created_by": "Créée par",
+    "how_it_works": "Fonctionnement",
+    "how_it_works_body": "Assignez un ticket à la squad : {{name}} le prend, le découpe si besoin et confie chaque partie à un membre. L'avancement apparaît sur le ticket.",
+    "member_status": {
+      "working": "En cours",
+      "idle": "Inactif",
+      "offline": "Hors ligne",
+      "unstable": "Instable",
+      "archived": "Archivé"
+    }
   },
   "member": {
     "dm_placeholder": "Écrire à {{name}}",
@@ -41,7 +65,13 @@
       "owner": "Propriétaire",
       "admin": "Administrateur",
       "member": "Membre"
-    }
+    },
+    "copy_email": "Copier l'e-mail",
+    "email": "E-mail",
+    "role_label": "Rôle",
+    "joined": "Arrivée",
+    "agents": "Agents",
+    "squads": "Squads"
   },
   "panel": {
     "now": "En ce moment",
@@ -54,12 +84,17 @@
     "squad": "Squad",
     "leader": "Responsable",
     "earlier": "Conversations précédentes",
-    "unread": "Non lu"
+    "unread": "Non lu",
+    "status": "Statut",
+    "idle_note": "Inactif — assignez-lui un ticket ou écrivez-lui.",
+    "offline_note": "Hors ligne — son runtime n'est pas connecté ; le travail attend sa reconnexion.",
+    "replying_in_chat": "Répond dans le chat",
+    "queued": "En file :",
+    "chat_reply": "une réponse",
+    "now_counts": "{{running}} en cours · {{queued}} en file"
   },
   "channel": {
     "private": "Privé",
-    "members_count_one": "{{count}} membre",
-    "members_count_other": "{{count}} membres",
     "members_title": "Membres de #{{name}}",
     "add_members": "Ajouter des personnes ou des agents",
     "remove": "Retirer",
@@ -73,19 +108,37 @@
     "agents_hint": "Les agents du canal répondent quand vous les @mentionnez, puis continuent dans le fil où ils ont répondu.",
     "not_found": "Ce canal n'existe pas ou vous n'y avez pas accès.",
     "create": {
-      "title": "Nouveau canal",
+      "title": "Créer un canal",
       "name": "Nom",
-      "name_placeholder": "ex. lancement",
-      "about": "Sujet",
-      "about_placeholder": "À quoi sert ce canal ? (facultatif)",
-      "private": "Rendre privé",
-      "private_hint": "Seules les personnes ajoutées peuvent le trouver et le lire. Les canaux publics sont ouverts à tout l'espace.",
+      "name_placeholder": "ex. release-0.9",
+      "about": "Objet",
+      "about_placeholder": "De quoi parle ce canal ?",
+      "private_hint": "Seuls les membres le voient. Ses agents n'emportent jamais son contenu ailleurs.",
       "agents": "Agents",
       "people": "Personnes",
       "submit": "Créer le canal",
       "failed": "Impossible de créer le canal",
-      "name_taken": "Un canal porte déjà ce nom"
-    }
+      "name_taken": "Un canal porte déjà ce nom",
+      "description": "Un espace partagé où personnes et agents parlent d'un sujet. Les agents répondent quand vous les @mentionnez.",
+      "optional": "Facultatif",
+      "members": "Membres",
+      "members_count_one": "{{count}}, vous compris",
+      "members_count_other": "{{count}}, vous compris",
+      "no_matches": "Aucun résultat",
+      "visibility": "Visibilité",
+      "public_hint": "Tout membre de l'espace de travail peut le trouver et le rejoindre.",
+      "privacy_note": "Les agents ne voient jamais les conversations privées",
+      "cancel": "Annuler"
+    },
+    "public": "Public",
+    "about": "À propos",
+    "no_about": "Aucun objet défini.",
+    "people": "Personnes",
+    "agents": "Agents",
+    "settings": "Paramètres",
+    "visibility": "Visibilité",
+    "mention_hint": "Les agents de ce canal répondent quand vous les @mentionnez",
+    "no_mention_note": "Visible par vous seul : aucun agent n'a été mentionné, aucun ne répondra."
   },
   "conversation": {
     "replying": "{{name}} répond…",
@@ -95,7 +148,7 @@
     "agent_badge": "Agent",
     "thread_placeholder": "Répondre…",
     "thread_empty": "Les réponses restent sous ce message.",
-    "back": "Retour"
+    "new_messages": "Nouveau"
   },
   "chat": {
     "untitled": "Sans titre",
@@ -116,18 +169,26 @@
     "archived_no_chat": "{{name}} est archivé et n'a aucune conversation avec vous.",
     "thread": {
       "title": "Fil",
-      "back": "Revenir à la conversation",
-      "root_label": "En réponse à",
       "empty": "Les réponses ici restent attachées à ce message. {{name}} voit le message auquel vous répondez.",
       "reply": "Répondre dans un fil",
       "replies_one": "{{count}} réponse",
       "replies_other": "{{count}} réponses",
-      "open_failed": "Impossible d'ouvrir le fil"
+      "open_failed": "Impossible d'ouvrir le fil",
+      "last_reply": "Dernière réponse {{time}}",
+      "in": "dans {{name}}",
+      "close": "Fermer le fil"
     },
     "issue": {
       "create": "Créer une tâche",
       "created": "{{identifier}} créée et assignée à {{name}}",
       "create_failed": "Impossible de créer la tâche"
     }
+  },
+  "status": {
+    "archived": "Archivé",
+    "offline": "Hors ligne",
+    "working": "En cours",
+    "waiting": "En attente",
+    "idle": "Inactif"
   }
 }

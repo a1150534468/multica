@@ -58,6 +58,8 @@ import {
   splitTimeline,
 } from "../lib/copy-text";
 import { stripChatQuickActionsProtocol } from "../lib/quick-actions";
+import { useActorName } from "@multica/core/workspace/hooks";
+import { ActorAvatar } from "../../common/actor-avatar";
 import { useT } from "../../i18n";
 
 // ─── Public component ────────────────────────────────────────────────────
@@ -101,6 +103,47 @@ interface ChatMessageListProps {
    * visible row.
    */
   renderMessageExtras?: (message: ChatMessage) => ReactNode;
+  /**
+   * Render as a named timeline — avatar, name and time on each turn, a
+   * separator per day — instead of bubbles. `userId` writes the user turns
+   * and `agentId` the replies. A short timeline sits on the composer unless
+   * `anchor` is "top", as in a thread under its root message.
+   */
+  timeline?: { agentId: string; userId: string; anchor?: "top" | "bottom" };
+}
+
+// Consecutive turns from one author within this window read as one block.
+const TIMELINE_GROUP_MS = 5 * 60 * 1000;
+
+interface TimelineMeta {
+  day: string | null;
+  grouped: boolean;
+}
+
+function dayKey(iso: string): string {
+  return new Date(iso).toDateString();
+}
+
+function timelineMeta(items: readonly ChatRenderItem[]): Map<string, TimelineMeta> {
+  const out = new Map<string, TimelineMeta>();
+  let prevAt: string | null = null;
+  let prevRole: string | null = null;
+  for (const item of items) {
+    const at = item.kind === "message" ? item.message.created_at : new Date().toISOString();
+    const role = item.kind === "message"
+      ? item.message.message_kind === "issue_event" ? "event" : item.message.role
+      : "assistant";
+    const newDay = !prevAt || dayKey(prevAt) !== dayKey(at);
+    const grouped =
+      !newDay &&
+      role !== "event" &&
+      role === prevRole &&
+      new Date(at).getTime() - new Date(prevAt!).getTime() < TIMELINE_GROUP_MS;
+    out.set(item.key, { day: newDay ? at : null, grouped });
+    prevAt = at;
+    prevRole = role;
+  }
+  return out;
 }
 
 // ─── Virtuoso chrome ─────────────────────────────────────────────────────
@@ -199,6 +242,7 @@ export function ChatMessageList({
   onRegenerateQuickActions,
   quickActionsPendingMessageId = null,
   renderMessageExtras,
+  timeline,
 }: ChatMessageListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollContainerEl, setScrollContainerEl] = useState<HTMLDivElement | null>(null);
@@ -289,6 +333,11 @@ export function ChatMessageList({
     return items;
   }, [messages, hasLive, pendingTaskId]);
 
+  const meta = useMemo(
+    () => (timeline ? timelineMeta(renderItems) : null),
+    [timeline, renderItems],
+  );
+
   const firstIndex = renderItems.length > 0 ? firstItemIndex : 0;
   const liveEndKey = renderItems[renderItems.length - 1]?.key ?? null;
 
@@ -332,7 +381,12 @@ export function ChatMessageList({
       // container paints nothing for that whole window anyway — the rows are
       // not measured yet — so this costs no visible time and spares the
       // reader a frame of the wrong messages (see stick-to-bottom.ts).
-      className={cn("flex-1 overflow-y-auto", CHAT_GUTTER, !hasReachedLiveEnd && "invisible")}
+      className={cn(
+        "flex-1 overflow-y-auto",
+        CHAT_GUTTER,
+        timeline && timeline.anchor !== "top" && "flex flex-col",
+        !hasReachedLiveEnd && "invisible",
+      )}
     >
       {/* Already inside the gutter + column, so this pre-mount frame renders the
        *  skeleton BODY rather than <ChatMessageSkeleton>, which brings its own
@@ -349,6 +403,7 @@ export function ChatMessageList({
       <Virtuoso
         ref={virtuosoRef}
         customScrollParent={scrollContainerEl}
+        style={timeline && timeline.anchor !== "top" ? { marginTop: "auto" } : undefined}
         data={renderItems}
         firstItemIndex={firstIndex}
         // Open pinned to the newest message. The list is remounted per session
@@ -384,11 +439,8 @@ export function ChatMessageList({
         computeItemKey={(_, item) => item.key}
         context={listContext}
         components={LIST_COMPONENTS}
-        itemContent={(_, item) => (
-          <div
-            className={cn(CHAT_COLUMN, "group/message py-2")}
-            {...(item.key === liveEndKey ? { [LIVE_END_ROW_ATTR]: "" } : {})}
-          >
+        itemContent={(_, item) => {
+          const bubble = (
             <MessageBubble
               item={item}
               isPending={!!pendingTaskId && item.taskId === pendingTaskId}
@@ -400,9 +452,27 @@ export function ChatMessageList({
               quickActionsPendingMessageId={quickActionsPendingMessageId}
               starterCardsMessageId={starterCardsMessageId}
               renderMessageExtras={renderMessageExtras}
+              plain={!!timeline}
             />
-          </div>
-        )}
+          );
+          const liveEnd = item.key === liveEndKey ? { [LIVE_END_ROW_ATTR]: "" } : {};
+          if (!timeline) {
+            return (
+              <div className={cn(CHAT_COLUMN, "group/message py-2")} {...liveEnd}>
+                {bubble}
+              </div>
+            );
+          }
+          const m = meta?.get(item.key) ?? { day: null, grouped: false };
+          return (
+            <div className={CHAT_COLUMN} {...liveEnd}>
+              {m.day && <TimelineDaySeparator at={m.day} />}
+              <TimelineTurn item={item} grouped={m.grouped} timeline={timeline}>
+                {bubble}
+              </TimelineTurn>
+            </div>
+          );
+        }}
       />
       </RichContentScrollRootProvider>
       )}
@@ -448,6 +518,74 @@ function ChatSkeletonBody() {
   );
 }
 
+// ─── Timeline chrome ─────────────────────────────────────────────────────
+
+function formatTurnTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+}
+
+export function TimelineDaySeparator({ at }: { at: string }) {
+  const { t } = useT("chat");
+  const d = new Date(at);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  const label =
+    d.toDateString() === today.toDateString()
+      ? t(($) => $.message_list.today)
+      : d.toDateString() === yesterday.toDateString()
+        ? t(($) => $.message_list.yesterday)
+        : d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return (
+    <div className="flex items-center gap-3 py-3 text-micro text-muted-foreground" role="separator">
+      <span className="h-px flex-1 bg-border" />
+      {label}
+      <span className="h-px flex-1 bg-border" />
+    </div>
+  );
+}
+
+const TimelineTurn = memo(function TimelineTurn({
+  item,
+  grouped,
+  timeline,
+  children,
+}: {
+  item: ChatRenderItem;
+  grouped: boolean;
+  timeline: { agentId: string; userId: string };
+  children: ReactNode;
+}) {
+  const { getActorName } = useActorName();
+  const message = item.kind === "message" ? item.message : null;
+  if (message?.message_kind === "issue_event") {
+    return <div className="group/message relative py-1 pl-11">{children}</div>;
+  }
+  const fromUser = message?.role === "user";
+  const actorType = fromUser ? "member" : "agent";
+  const actorId = fromUser ? timeline.userId : timeline.agentId;
+  return (
+    <div className={cn("group/message relative flex gap-3", grouped ? "pt-0.5" : "pt-3")}>
+      <div className="w-8 shrink-0">
+        {!grouped && <ActorAvatar actorType={actorType} actorId={actorId} size="md" showStatusDot={!fromUser} />}
+      </div>
+      <div className="min-w-0 flex-1">
+        {!grouped && (
+          <div className="flex items-baseline gap-2">
+            <span className="truncate text-body font-medium">{getActorName(actorType, actorId)}</span>
+            {message && (
+              <time className="shrink-0 text-micro text-muted-foreground" dateTime={message.created_at}>
+                {formatTurnTime(message.created_at)}
+              </time>
+            )}
+          </div>
+        )}
+        {children}
+      </div>
+    </div>
+  );
+});
+
 // ─── Message bubbles ─────────────────────────────────────────────────────
 
 // memo: every streamed task:message re-renders ChatMessageList, and with it
@@ -466,9 +604,12 @@ const MessageBubble = memo(function MessageBubble({
   quickActionsPendingMessageId,
   starterCardsMessageId,
   renderMessageExtras,
+  plain = false,
 }: {
   item: ChatRenderItem;
   isPending: boolean;
+  /** No bubble: user turns read as plain text under their author line. */
+  plain?: boolean;
   transformContent?: (content: string) => string;
   onQuickAction?: (action: ChatQuickAction) => void | Promise<unknown>;
   quickActionsDisabled: boolean;
@@ -500,6 +641,21 @@ const MessageBubble = memo(function MessageBubble({
   }
 
   const extras = renderMessageExtras?.(message);
+
+  if (message.role === "user" && plain) {
+    return (
+      <div className="flex flex-col gap-1 break-words text-body">
+        <RichContent
+          content={message.content}
+          attachments={message.attachments}
+          density="compact"
+          phase="settled"
+        />
+        <AttachmentList attachments={message.attachments} content={message.content} />
+        {extras}
+      </div>
+    );
+  }
 
   if (message.role === "user") {
     return (
