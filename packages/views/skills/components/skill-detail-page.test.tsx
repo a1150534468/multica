@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Skill } from "@multica/core/types";
 import { I18nProvider } from "@multica/core/i18n/react";
 import enCommon from "../../locales/en/common.json";
 import enSkills from "../../locales/en/skills.json";
-import { useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { NavigationProvider, type NavigationAdapter } from "../../navigation";
 
 const TEST_RESOURCES = { en: { common: enCommon, skills: enSkills } };
@@ -97,6 +97,30 @@ vi.mock("../../rich-content", () => ({
     <div data-testid="preview">{content}</div>
   ),
 }));
+// The rich editor, reduced to its contract: a controlled value, onUpdate on
+// typing, onReady once mounted, and an imperative focus.
+vi.mock("../../editor", () => ({
+  ContentEditor: forwardRef(function FakeEditor(
+    {
+      value,
+      onUpdate,
+      onReady,
+    }: { value: string; onUpdate: (markdown: string) => void; onReady?: () => void },
+    ref,
+  ) {
+    const el = useRef<HTMLTextAreaElement>(null);
+    useImperativeHandle(ref, () => ({ focus: () => el.current?.focus() }));
+    useEffect(() => onReady?.(), []); // eslint-disable-line react-hooks/exhaustive-deps
+    return (
+      <textarea
+        ref={el}
+        aria-label="Markdown editor"
+        value={value}
+        onChange={(e) => onUpdate(e.target.value)}
+      />
+    );
+  }),
+}));
 vi.mock("../../labels/resource-label-picker", () => ({
   ResourceLabelPicker: () => <div data-testid="labels" />,
 }));
@@ -108,7 +132,10 @@ vi.mock("@multica/ui/components/common/actor-avatar", () => ({
   ActorAvatar: () => <div />,
 }));
 
+import { api } from "@multica/core/api";
 import { SkillDetailPage } from "./skill-detail-page";
+
+const markdownEditor = () => screen.getByLabelText("Markdown editor") as HTMLTextAreaElement;
 
 const LONG_DESCRIPTION =
   "Animation for product interfaces — when to animate and when not to. " +
@@ -196,13 +223,13 @@ describe("SkillDetailPage file selection", () => {
   it("opens SKILL.md beside the skill's properties, with no tabs", async () => {
     renderPage();
     expect(await screen.findByLabelText("Description")).toBeTruthy();
-    expect(screen.getByTestId("preview").textContent).toContain("# Interface Animations");
+    expect(markdownEditor().value).toBe("# Interface Animations");
     expect(screen.queryByRole("tab")).toBeNull();
   });
 
   it("opens the file named in ?file=, keeping the skill's properties beside it", async () => {
     renderPage(new URLSearchParams("file=patterns.md"));
-    expect((await screen.findByTestId("preview")).textContent).toContain("# Patterns");
+    expect(((await screen.findByLabelText("Markdown editor")) as HTMLTextAreaElement).value).toBe("# Patterns");
     expect(screen.getByText("Reference file of aiforui-animations")).toBeTruthy();
     expect(screen.getByLabelText("Description")).toBeTruthy();
   });
@@ -215,7 +242,7 @@ describe("SkillDetailPage file selection", () => {
 
     fireEvent.click(toggle);
     expect(screen.queryByLabelText("Description")).toBeNull();
-    expect(screen.getByTestId("preview")).toBeTruthy();
+    expect(markdownEditor()).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Details" }));
     expect(screen.getByLabelText("Description")).toBeTruthy();
@@ -252,39 +279,56 @@ describe("SkillDetailPage file selection", () => {
     await userEvent.click(screen.getByRole("button", { name: "Add" }));
 
     expect(replace).toHaveBeenLastCalledWith(`${PATHNAME}?file=notes.md`);
-    const editor = screen.getByRole("textbox", { name: /notes\.md/ });
-    expect(screen.queryByTestId("preview")).toBeNull();
-    expect(document.activeElement).toBe(editor);
+    expect(markdownEditor().value).toBe("");
+    expect(document.activeElement).toBe(markdownEditor());
   });
 });
 
-describe("SkillDetailPage file mode", () => {
-  it("keeps plain-text mode when switching files", async () => {
-    const { openFile } = renderPage();
-
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
-    expect(screen.getByRole("textbox", { name: /SKILL\.md/ })).toBeTruthy();
-
-    // Mode used to live inside FileViewer, which the per-path `key`
-    // remounted — selecting another file silently snapped back to preview.
-    openFile("patterns.md");
-    expect(screen.getByRole("textbox", { name: /patterns\.md/ })).toBeTruthy();
-    expect(screen.queryByTestId("preview")).toBeNull();
-  });
-
-  it("strips frontmatter from the preview so name/description are not shown twice", async () => {
+describe("SkillDetailPage editor", () => {
+  it("edits markdown in the rich editor, with no preview or edit switch", async () => {
     renderPage();
-    const preview = await screen.findByTestId("preview");
-    expect(preview.textContent).toContain("# Interface Animations");
-    expect(preview.textContent).not.toContain("name: aiforui-animations");
+    expect(((await screen.findByLabelText("Markdown editor")) as HTMLTextAreaElement).value).toBe(
+      "# Interface Animations",
+    );
+    for (const name of ["Preview", "Edit", "Plain text"]) {
+      expect(screen.queryByRole("button", { name })).toBeNull();
+    }
   });
 
-  it("offers read-only viewers a plain-text view and no file actions", async () => {
+  it("keeps the frontmatter and surrounding blank lines when the body changes", async () => {
+    vi.mocked(api.updateSkill).mockImplementation(async (_id, payload) => ({
+      ...(skillRef.current as Skill),
+      ...payload,
+      updated_at: "2026-07-29T11:00:00Z",
+    }) as Skill);
+    renderPage();
+    fireEvent.change(await screen.findByLabelText("Markdown editor"), {
+      target: { value: "# Interface Animations\n\nMore" },
+    });
+    await userEvent.click(screen.getByRole("button", { name: /Save changes/ }));
+
+    expect(vi.mocked(api.updateSkill).mock.calls[0]![1].content).toBe(
+      "---\nname: aiforui-animations\n---\n\n# Interface Animations\n\nMore\n",
+    );
+  });
+
+  it("edits other files as plain text", async () => {
+    skillRef.current = {
+      ...baseSkill,
+      files: [{ id: "f-2", path: "scripts/run.sh", content: "echo hi\n" } as Skill["files"][number]],
+    };
+    renderPage(new URLSearchParams("file=scripts/run.sh"));
+    const field = (await screen.findByRole("textbox", { name: /scripts\/run\.sh/ })) as HTMLTextAreaElement;
+    expect(field.value).toBe("echo hi\n");
+    expect(screen.queryByLabelText("Markdown editor")).toBeNull();
+  });
+
+  it("shows read-only viewers the rendered file and no file actions", async () => {
     canEditRef.current = false;
     renderPage(new URLSearchParams("file=patterns.md"));
 
-    expect(await screen.findByRole("button", { name: "Plain text" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+    expect((await screen.findByTestId("preview")).textContent).toContain("# Patterns");
+    expect(screen.queryByLabelText("Markdown editor")).toBeNull();
     for (const name of ["New file", "Rename", "Delete file"]) {
       expect(screen.queryByRole("button", { name })).toBeNull();
     }
@@ -319,8 +363,7 @@ describe("SkillDetailPage save pill", () => {
 
   it("counts a supporting-file edit as one changed file", async () => {
     renderPage(new URLSearchParams("file=patterns.md"));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
-    fireEvent.change(screen.getByRole("textbox", { name: /patterns\.md/ }), {
+    fireEvent.change(await screen.findByLabelText("Markdown editor"), {
       target: { value: "edited content" },
     });
     expect(screen.getByText("Changed: 1 file")).toBeTruthy();
@@ -400,8 +443,7 @@ describe("SkillDetailPage draft baseline (MUL-5645)", () => {
       content: `${baseSkill.content}\n## Added remotely\n`,
     });
 
-    const preview = await screen.findByTestId("preview");
-    expect(preview.textContent).toContain("Added remotely");
+    await waitFor(() => expect(markdownEditor().value).toContain("Added remotely"));
     expect(screen.queryByText(CONFLICT_BANNER)).toBeNull();
     expect(screen.queryByText(/^Changed:/)).toBeNull();
   });

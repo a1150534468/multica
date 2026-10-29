@@ -215,10 +215,6 @@
     },
     "files": {
       "add_file": "新建檔案",
-      "mode_aria": "檔案檢視",
-      "mode_preview": "預覽",
-      "mode_edit": "編輯",
-      "mode_raw": "純文字",
       "reference_of": "{{name}} 的參考檔案"
     }
   },
@@ -354,7 +350,7 @@
   },
   "file_viewer": {
     "no_content": "*暫無內容*",
-    "markdown_placeholder": "輸入 Markdown 內容...",
+    "markdown_placeholder": "開始寫，或輸入 / 叫出命令…",
     "raw_placeholder": "檔案內容...",
     "raw_aria": "{{path}} 的純文字內容"
   }

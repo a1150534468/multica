@@ -1,110 +1,160 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { Textarea } from "@multica/ui/components/ui/textarea";
-import { parseFrontmatter } from "@multica/core/skills/frontmatter";
+import { splitFrontmatter } from "@multica/core/skills/frontmatter";
+import { ContentEditor, type ContentEditorRef } from "../../editor";
 import { RichContent } from "../../rich-content";
-import { cn } from "@multica/ui/lib/utils";
 import { useT } from "../../i18n";
-
-/**
- * How the body of the selected file is rendered. Owned by the page, not by
- * this component: the mode is a property of how the user wants to work, not
- * of the file they happen to have open, so switching files must not silently
- * bounce them back to preview.
- */
-export type FileMode = "preview" | "raw";
 
 export function isMarkdownPath(path: string) {
   return path.endsWith(".md") || path.endsWith(".mdx");
 }
 
 /**
- * Body of a single skill file.
- *
- * Frontmatter is stripped from the preview because `name` / `description` are
- * surfaced as first-class properties above SKILL.md — rendering them again
- * here was the third copy of the same two fields.
+ * Body of a single skill file. Markdown opens in the same rich editor and
+ * type scale as knowledge base docs, so there is no preview/source switch;
+ * anything else (scripts, JSON, YAML) is edited as plain text.
  */
 export function FileViewer({
   path,
   content,
-  mode,
   readOnly,
   autoFocus,
-  autoHeight = false,
   onChange,
   onFocusHandled,
 }: {
   path: string;
   content: string;
-  mode: FileMode;
   readOnly: boolean;
-  /** Set by "Edit": put the caret in this file's editor once it renders. */
+  /** Put the caret in this file's editor once it renders (a just-added file). */
   autoFocus?: boolean;
-  /** Grow with the content (inside a page that scrolls) instead of filling the parent. */
-  autoHeight?: boolean;
   onChange: (content: string) => void;
   /** Called once the caret has landed, so the request is not replayed. */
   onFocusHandled?: () => void;
 }) {
-  const { t } = useT("skills");
-  const isMd = isMarkdownPath(path);
-  const editorRef = useRef<HTMLTextAreaElement>(null);
-
-  const body = useMemo(
-    () => (isMd ? parseFrontmatter(content).body : content),
-    [content, isMd],
-  );
-
-  // The caller flips the mode to raw in the same update that raises this flag,
-  // so by the time the effect runs the textarea below is mounted. Focusing
-  // through a request the page owns — rather than `autoFocus` on the element —
-  // is what makes "Edit" work on the file that is ALREADY open: that path
-  // changes no key, mounts nothing, and would never re-run a mount-only focus.
-  useEffect(() => {
-    if (autoFocus !== true) return;
-    const el = editorRef.current;
-    if (!el) return;
-    el.focus();
-    // Caret at the top. Jumping to the end of a multi-thousand-character
-    // reference file would scroll away the content the user just clicked.
-    el.setSelectionRange(0, 0);
-    onFocusHandled?.();
-  }, [autoFocus, onFocusHandled]);
-
-  // Non-markdown files have nothing to preview; they are always raw.
-  if (isMd && mode === "preview") {
+  if (isMarkdownPath(path)) {
     return (
-      <div className={autoHeight ? undefined : "h-full overflow-y-auto"}>
-        {/* pb-24: keeps the last lines readable under the floating save pill. */}
-        <div className="mx-auto max-w-[68ch] px-6 pb-24 pt-7 sm:px-8">
+      <MarkdownFile
+        content={content}
+        readOnly={readOnly}
+        autoFocus={autoFocus}
+        onChange={onChange}
+        onFocusHandled={onFocusHandled}
+      />
+    );
+  }
+  return (
+    <PlainFile
+      path={path}
+      content={content}
+      readOnly={readOnly}
+      autoFocus={autoFocus}
+      onChange={onChange}
+      onFocusHandled={onFocusHandled}
+    />
+  );
+}
+
+/**
+ * The frontmatter stays out of the editor — `name` and `description` are
+ * edited in the side panel — and is put back byte for byte on every change,
+ * along with the blank lines around the body, so editing a paragraph never
+ * rewrites the parts of the file nobody touched.
+ */
+function MarkdownFile({
+  content,
+  readOnly,
+  autoFocus,
+  onChange,
+  onFocusHandled,
+}: {
+  content: string;
+  readOnly: boolean;
+  autoFocus?: boolean;
+  onChange: (content: string) => void;
+  onFocusHandled?: () => void;
+}) {
+  const { t } = useT("skills");
+  const editorRef = useRef<ContentEditorRef>(null);
+  const { head, body } = splitFrontmatter(content);
+  const lead = /^\n*/.exec(body)![0];
+  const rest = body.slice(lead.length);
+  const trail = /\n*$/.exec(rest)![0];
+  const text = rest.slice(0, rest.length - trail.length);
+
+  const focusRequested = useRef(autoFocus);
+  focusRequested.current = autoFocus;
+  const focusIfRequested = () => {
+    if (!focusRequested.current || !editorRef.current) return;
+    editorRef.current.focus();
+    onFocusHandled?.();
+  };
+
+  return (
+    <div className="h-full overflow-y-auto">
+      {/* pb-24 keeps the last lines readable under the floating save pill. */}
+      <div className="prose-document mx-auto w-full max-w-3xl px-6 pt-8 pb-24 sm:px-10">
+        {readOnly ? (
           <RichContent
-            content={body || t(($) => $.file_viewer.no_content)}
+            content={text || t(($) => $.file_viewer.no_content)}
             density="document"
             phase="settled"
           />
-        </div>
+        ) : (
+          <ContentEditor
+            ref={editorRef}
+            value={text}
+            placeholder={t(($) => $.file_viewer.markdown_placeholder)}
+            onUpdate={(markdown) => onChange(`${head}${lead}${markdown.replace(/^\n+|\n+$/g, "")}${trail}`)}
+            onReady={focusIfRequested}
+            debounceMs={150}
+            flushPendingOnUnmount
+            disableMentions
+            className="min-h-[50vh]"
+          />
+        )}
       </div>
-    );
-  }
+    </div>
+  );
+}
+
+function PlainFile({
+  path,
+  content,
+  readOnly,
+  autoFocus,
+  onChange,
+  onFocusHandled,
+}: {
+  path: string;
+  content: string;
+  readOnly: boolean;
+  autoFocus?: boolean;
+  onChange: (content: string) => void;
+  onFocusHandled?: () => void;
+}) {
+  const { t } = useT("skills");
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (autoFocus !== true || !ref.current) return;
+    ref.current.focus();
+    // Caret at the top: jumping to the end of a long file would scroll away
+    // the content the user just opened.
+    ref.current.setSelectionRange(0, 0);
+    onFocusHandled?.();
+  }, [autoFocus, onFocusHandled]);
 
   return (
     <Textarea
-      ref={editorRef}
+      ref={ref}
       value={content}
       readOnly={readOnly}
       onChange={(e) => onChange(e.target.value)}
       aria-label={t(($) => $.file_viewer.raw_aria, { path })}
-      placeholder={
-        isMd
-          ? t(($) => $.file_viewer.markdown_placeholder)
-          : t(($) => $.file_viewer.raw_placeholder)
-      }
-      className={cn(
-        autoHeight ? "min-h-64 field-sizing-content" : "h-full min-h-full",
-        "resize-none rounded-none border-0 px-6 pb-24 pt-5 font-mono text-body leading-relaxed read-only:cursor-default focus-visible:ring-0 sm:px-8",
-      )}
+      placeholder={t(($) => $.file_viewer.raw_placeholder)}
+      className="h-full min-h-full resize-none rounded-none border-0 px-6 pb-24 pt-5 font-mono text-body leading-relaxed read-only:cursor-default focus-visible:ring-0 sm:px-8"
     />
   );
 }

@@ -215,10 +215,6 @@
     },
     "files": {
       "add_file": "새 파일",
-      "mode_aria": "파일 보기",
-      "mode_preview": "미리보기",
-      "mode_edit": "편집",
-      "mode_raw": "일반 텍스트",
       "reference_of": "{{name}}의 참조 파일"
     }
   },
@@ -354,7 +350,7 @@
   },
   "file_viewer": {
     "no_content": "*아직 내용이 없습니다*",
-    "markdown_placeholder": "Markdown 내용 작성...",
+    "markdown_placeholder": "입력하거나 /로 명령어…",
     "raw_placeholder": "파일 내용...",
     "raw_aria": "{{path}}의 일반 텍스트 내용"
   }

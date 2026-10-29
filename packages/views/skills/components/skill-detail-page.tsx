@@ -61,7 +61,7 @@ import { useCanEditSkill } from "../hooks/use-can-edit-skill";
 import { useSkillPermissions } from "@multica/core/permissions";
 import { CapabilityBanner } from "@multica/ui/components/common/capability-banner";
 import { isRefreshableOrigin, readOrigin } from "../lib/origin";
-import { FileViewer, isMarkdownPath, type FileMode } from "./file-viewer";
+import { FileViewer } from "./file-viewer";
 import {
   AddToAgentDialog,
   type SkillActionsContext,
@@ -239,11 +239,9 @@ function FileSection({
   filePaths,
   selectedPath,
   selectedContent,
-  mode,
   canEdit,
   addingFile,
   focusEditor,
-  onModeChange,
   onStartAddFile,
   onAddFile,
   onCancelAddFile,
@@ -256,11 +254,9 @@ function FileSection({
   filePaths: string[];
   selectedPath: string;
   selectedContent: string;
-  mode: FileMode;
   canEdit: boolean;
   addingFile: boolean;
   focusEditor: boolean;
-  onModeChange: (mode: FileMode) => void;
   onStartAddFile: () => void;
   onAddFile: (path: string) => void;
   onCancelAddFile: () => void;
@@ -271,7 +267,6 @@ function FileSection({
 }) {
   const { t } = useT("skills");
   const [renaming, setRenaming] = useState(false);
-  const isMd = isMarkdownPath(selectedPath);
   const isMain = selectedPath === SKILL_MD;
 
   return (
@@ -288,37 +283,6 @@ function FileSection({
             <span className="truncate font-mono text-foreground">{selectedPath}</span>
           </span>
           <div className="ml-auto flex shrink-0 items-center gap-1">
-            {isMd && (
-              // The second segment is named for what it does for THIS viewer:
-              // "Edit" when the pane it opens accepts typing, "Plain text"
-              // when the same pane is read-only.
-              <div
-                role="group"
-                aria-label={t(($) => $.detail.files.mode_aria)}
-                className="flex items-center gap-0.5 rounded-md bg-muted p-0.5"
-              >
-                {(["preview", "raw"] as const).map((value) => (
-                  <button
-                    key={value}
-                    type="button"
-                    aria-pressed={mode === value}
-                    onClick={() => onModeChange(value)}
-                    className={cn(
-                      "h-6 rounded-xs px-2 text-caption font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                      mode === value
-                        ? "bg-surface text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {value === "preview"
-                      ? t(($) => $.detail.files.mode_preview)
-                      : canEdit
-                        ? t(($) => $.detail.files.mode_edit)
-                        : t(($) => $.detail.files.mode_raw)}
-                  </button>
-                ))}
-              </div>
-            )}
             {canEdit && (
               <Tooltip>
                 <TooltipTrigger
@@ -403,7 +367,6 @@ function FileSection({
           key={selectedPath}
           path={selectedPath}
           content={selectedContent}
-          mode={mode}
           readOnly={!canEdit}
           autoFocus={focusEditor}
           onChange={onContentChange}
@@ -474,10 +437,6 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
   const [panelChoice, setPanelChoice] = useState<boolean | null>(null);
   const panelOpen = panelChoice ?? !isMobile;
 
-  // Preview/raw is a property of how the user wants to work, so it lives here
-  // and survives switching files. It used to live inside FileViewer, which the
-  // per-file `key` remounted — every file switch silently snapped back.
-  const [fileMode, setFileMode] = useState<FileMode>("preview");
   // Which file's editor is waiting for the caret. A path rather than a boolean
   // so a request raised for one row cannot land in another row's editor if the
   // selection moves before the effect runs.
@@ -690,8 +649,6 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
     setFiles((prev) => [...prev, { path, content: "" }]);
     setSelectedPath(path);
     setAddingFile(false);
-    // A new file is empty: open it ready to type rather than on a blank preview.
-    setFileMode("raw");
     setFocusPath(path);
   };
 
@@ -793,11 +750,9 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
       filePaths={filePaths}
       selectedPath={selectedPath}
       selectedContent={selectedContent}
-      mode={fileMode}
       canEdit={canEdit}
       addingFile={addingFile}
       focusEditor={focusPath === selectedPath}
-      onModeChange={setFileMode}
       onStartAddFile={() => setAddingFile(true)}
       onAddFile={handleAddFile}
       onCancelAddFile={() => setAddingFile(false)}

@@ -227,10 +227,6 @@
     },
     "files": {
       "add_file": "Nouveau fichier",
-      "mode_aria": "Vue du fichier",
-      "mode_preview": "Aperçu",
-      "mode_edit": "Modifier",
-      "mode_raw": "Texte brut",
       "reference_of": "Fichier de référence de {{name}}"
     }
   },
@@ -368,7 +364,7 @@
   },
   "file_viewer": {
     "no_content": "*Aucun contenu pour l'instant*",
-    "markdown_placeholder": "Rédigez du contenu Markdown...",
+    "markdown_placeholder": "Écrivez, ou tapez / pour les commandes…",
     "raw_placeholder": "Contenu du fichier...",
     "raw_aria": "Contenu en texte brut de {{path}}"
   }

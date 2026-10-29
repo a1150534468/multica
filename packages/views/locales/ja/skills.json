@@ -215,10 +215,6 @@
     },
     "files": {
       "add_file": "新規ファイル",
-      "mode_aria": "ファイル表示",
-      "mode_preview": "プレビュー",
-      "mode_edit": "編集",
-      "mode_raw": "プレーンテキスト",
       "reference_of": "{{name}} の参照ファイル"
     }
   },
@@ -354,7 +350,7 @@
   },
   "file_viewer": {
     "no_content": "*まだ内容がありません*",
-    "markdown_placeholder": "Markdown の内容を記述...",
+    "markdown_placeholder": "入力するか / でコマンド…",
     "raw_placeholder": "ファイルの内容...",
     "raw_aria": "{{path}} のプレーンテキスト"
   }
