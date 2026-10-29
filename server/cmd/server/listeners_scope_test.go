@@ -26,7 +26,7 @@ func TestRegisterListeners_ChatSessionCreatedGoesOnlyToCreator(t *testing.T) {
 
 	bus.Publish(events.Event{
 		Type: protocol.EventChatSessionCreated, WorkspaceID: "ws-1",
-		ActorType: "member", ActorID: "creator-1", ChatSessionID: "chat-1",
+		ActorType: "member", ActorID: "creator-1", ChatSessionID: "chat-1", ChatSessionOwnerID: "creator-1",
 		Payload: protocol.ChatSessionCreatedPayload{
 			WorkspaceID: "ws-1", ChatSessionID: "chat-1", CreatorID: "creator-1",
 			Title: "private opening title",
@@ -57,7 +57,7 @@ func TestRegisterListeners_ChatSessionTitleUpdateGoesOnlyToCreator(t *testing.T)
 
 	bus.Publish(events.Event{
 		Type: protocol.EventChatSessionUpdated, WorkspaceID: "ws-1",
-		ActorType: "member", ActorID: "creator-1", ChatSessionID: "chat-1",
+		ActorType: "member", ActorID: "creator-1", ChatSessionID: "chat-1", ChatSessionOwnerID: "creator-1",
 		Payload: protocol.ChatSessionUpdatedPayload{
 			ChatSessionID: "chat-1", Title: "private derived title",
 		},
@@ -106,24 +106,26 @@ func (f *fakeBroadcaster) Broadcast(message []byte) {
 	f.broadcastCalled++
 }
 
-// TestRegisterListeners_TaskChatGoToWorkspace pins the must-fix #1 contract
+// TestRegisterListeners_TaskEventsGoToWorkspace pins the must-fix #1 contract
 // from the PR #1429 review: until the WS client supports scope-subscribe and
-// reconnect-replay, high-frequency task/chat events MUST keep going through
-// workspace fanout. Routing them via BroadcastToScope("task"|"chat", ...)
-// with no client-side subscriber would silently drop every chat / task
-// message and break the live timeline + chat unread badges.
-func TestRegisterListeners_TaskChatGoToWorkspace(t *testing.T) {
+// reconnect-replay, task events MUST keep going through workspace fanout.
+// Routing them via BroadcastToScope("task"|"chat", ...) with no client-side
+// subscriber would silently drop them. Chat-task lifecycle events stay here
+// too: every member's agent presence depends on them.
+func TestRegisterListeners_TaskEventsGoToWorkspace(t *testing.T) {
 	cases := []struct {
 		name      string
 		eventType string
 		taskID    string
 		chatID    string
 	}{
-		{"task:message with TaskID", protocol.EventTaskMessage, "task-1", ""},
-		{"task:progress with TaskID", protocol.EventTaskProgress, "task-2", ""},
-		{"chat:message with ChatSessionID", protocol.EventChatMessage, "", "chat-1"},
-		{"chat:done with ChatSessionID", protocol.EventChatDone, "", "chat-2"},
-		{"chat:session_read with ChatSessionID", protocol.EventChatSessionRead, "", "chat-3"},
+		{"issue task:message", protocol.EventTaskMessage, "task-1", ""},
+		{"task:progress", protocol.EventTaskProgress, "task-2", ""},
+		{"chat task:queued", protocol.EventTaskQueued, "task-3", "chat-1"},
+		{"chat task:dispatch", protocol.EventTaskDispatch, "task-3", ""},
+		{"chat task:completed", protocol.EventTaskCompleted, "task-3", "chat-1"},
+		{"chat task:failed", protocol.EventTaskFailed, "task-3", "chat-1"},
+		{"chat task:cancelled", protocol.EventTaskCancelled, "task-3", "chat-1"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -149,6 +151,116 @@ func TestRegisterListeners_TaskChatGoToWorkspace(t *testing.T) {
 				t.Fatalf("expected workspace ws-1, got %q", fb.workspaceCalls[0].workspaceID)
 			}
 		})
+	}
+}
+
+// chatPrivateCases is every event carrying chat session content: all chat:*
+// events, plus the transcript stream of a chat task.
+var chatPrivateCases = []struct {
+	eventType string
+	taskID    string
+}{
+	{protocol.EventChatMessage, ""},
+	{protocol.EventChatDone, "task-1"},
+	{protocol.EventChatQuickActions, "task-1"},
+	{protocol.EventChatCancelFinalized, "task-1"},
+	{protocol.EventChatSessionCreated, ""},
+	{protocol.EventChatSessionUpdated, ""},
+	{protocol.EventChatSessionRead, ""},
+	{protocol.EventChatSessionDeleted, ""},
+	{protocol.EventTaskMessage, "task-1"},
+}
+
+func TestRegisterListeners_ChatContentGoesOnlyToSessionOwner(t *testing.T) {
+	for _, tc := range chatPrivateCases {
+		t.Run(tc.eventType, func(t *testing.T) {
+			bus := events.New()
+			fb := &fakeBroadcaster{}
+			registerListeners(bus, fb)
+
+			bus.Publish(events.Event{
+				Type: tc.eventType, WorkspaceID: "ws-1", ActorType: "system",
+				TaskID: tc.taskID, ChatSessionID: "chat-1", ChatSessionOwnerID: "owner-1",
+				Payload: map[string]any{"content": "private chat content"},
+			})
+
+			if len(fb.workspaceCalls) != 0 || len(fb.scopeCalls) != 0 || fb.broadcastCalled != 0 {
+				t.Fatalf("chat content left the owner: workspace=%+v scope=%+v broadcast=%d",
+					fb.workspaceCalls, fb.scopeCalls, fb.broadcastCalled)
+			}
+			if len(fb.userCalls) != 1 || fb.userCalls[0].userID != "owner-1" || len(fb.userCalls[0].exclude) != 0 {
+				t.Fatalf("user fanout = %+v, want owner-1 once on every connection", fb.userCalls)
+			}
+			var frame struct {
+				Type    string         `json:"type"`
+				Payload map[string]any `json:"payload"`
+			}
+			if err := json.Unmarshal(fb.userCalls[0].msg, &frame); err != nil {
+				t.Fatalf("decode owner frame: %v", err)
+			}
+			if frame.Type != tc.eventType || frame.Payload["content"] != "private chat content" {
+				t.Fatalf("owner frame = %+v", frame)
+			}
+		})
+	}
+}
+
+// A producer that cannot name the owner must not fall back to workspace
+// fanout: the owner refetches on the next lifecycle event, a leak is permanent.
+func TestRegisterListeners_ChatContentWithoutOwnerIsDropped(t *testing.T) {
+	for _, tc := range chatPrivateCases {
+		t.Run(tc.eventType, func(t *testing.T) {
+			bus := events.New()
+			fb := &fakeBroadcaster{}
+			registerListeners(bus, fb)
+
+			bus.Publish(events.Event{
+				Type: tc.eventType, WorkspaceID: "ws-1", ActorType: "system",
+				TaskID: tc.taskID, ChatSessionID: "chat-1",
+				Payload: map[string]any{"content": "private chat content"},
+			})
+
+			if len(fb.workspaceCalls) != 0 || len(fb.userCalls) != 0 || len(fb.scopeCalls) != 0 || fb.broadcastCalled != 0 {
+				t.Fatalf("ownerless chat event was delivered: workspace=%+v user=%+v scope=%+v broadcast=%d",
+					fb.workspaceCalls, fb.userCalls, fb.scopeCalls, fb.broadcastCalled)
+			}
+		})
+	}
+}
+
+// IM outbounds (Slack, Lark, ...) subscribe to chat:done and task:message on
+// the bus in-process. Narrowing the WebSocket fanout must not narrow them.
+func TestRegisterListeners_ChatRoutingKeepsInProcessListeners(t *testing.T) {
+	bus := events.New()
+	fb := &fakeBroadcaster{}
+	var got []events.Event
+	for _, eventType := range []string{protocol.EventChatDone, protocol.EventTaskMessage} {
+		bus.Subscribe(eventType, func(e events.Event) { got = append(got, e) })
+	}
+	registerListeners(bus, fb)
+
+	done := protocol.ChatDonePayload{ChatSessionID: "chat-1", TaskID: "task-1", Content: "assistant reply"}
+	message := protocol.TaskMessagePayload{TaskID: "task-1", Seq: 1, Type: "text", Content: "streamed text"}
+	for _, e := range []events.Event{
+		{Type: protocol.EventChatDone, WorkspaceID: "ws-1", ChatSessionID: "chat-1", ChatSessionOwnerID: "owner-1", Payload: done},
+		{Type: protocol.EventTaskMessage, WorkspaceID: "ws-1", TaskID: "task-1", ChatSessionID: "chat-1", ChatSessionOwnerID: "owner-1", Payload: message},
+		// Ownerless events are dropped from the WebSocket only.
+		{Type: protocol.EventChatDone, WorkspaceID: "ws-1", ChatSessionID: "chat-1", Payload: done},
+	} {
+		bus.Publish(e)
+	}
+
+	if len(got) != 3 {
+		t.Fatalf("in-process listener saw %d events, want 3", len(got))
+	}
+	if p, ok := got[0].Payload.(protocol.ChatDonePayload); !ok || p.Content != "assistant reply" {
+		t.Fatalf("chat:done payload = %#v, want the full reply", got[0].Payload)
+	}
+	if p, ok := got[1].Payload.(protocol.TaskMessagePayload); !ok || p.Content != "streamed text" {
+		t.Fatalf("task:message payload = %#v, want the full message", got[1].Payload)
+	}
+	if p, ok := got[2].Payload.(protocol.ChatDonePayload); !ok || p.Content != "assistant reply" {
+		t.Fatalf("ownerless chat:done payload = %#v, want the full reply", got[2].Payload)
 	}
 }
 
