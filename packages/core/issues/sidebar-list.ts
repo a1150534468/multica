@@ -1,9 +1,19 @@
 import type { IssueView } from "../api/schemas";
 import { baselineFromQuery } from "../issue-views/baseline";
-import type { IssueStatusCategory, ListIssuesParams, Project } from "../types";
+import type { BuiltinViewKey } from "../issue-views/sidebar-views";
+import type {
+  IssueStatusCategory,
+  IssueTableQuerySpec,
+  IssueTableRelation,
+  IssueTableScope,
+  IssueTableSortField,
+  ListIssuesParams,
+  Project,
+} from "../types";
 import { assigneeTypesForActorKind } from "./surface/scope";
 import { effectiveNegatedFilters } from "./stores/view-store";
-import { pruneAdvancedFilter } from "./stores/filter-tree";
+import { FILTER_DIMENSION_TABLE_FIELD, advancedFilterToTableQuery, advancedFilterUsesField } from "./stores/filter-tree";
+import type { MyIssuesRelation } from "./stores/my-issues-view-store";
 import type { SidebarIssueSettings, SidebarProjectSettings } from "./stores/sidebar-tree-store";
 
 /** Rows an expanded sidebar list shows before "Load more". */
@@ -13,6 +23,7 @@ export const SIDEBAR_PAGE_STEP = 10;
 
 export const projectSidebarSource = (projectId: string) => `project:${projectId}`;
 export const viewSidebarSource = (viewId: string) => `view:${viewId}`;
+export const builtinSidebarSource = (builtin: BuiltinViewKey) => `builtin:${builtin}`;
 
 interface StatusRef {
   key: string;
@@ -68,87 +79,118 @@ const VIEW_SORTS = new Set<string>([
 type SidebarViewFields = Pick<IssueView, "query" | "display" | "scope_variant"> &
   Partial<Pick<IssueView, "scope_type" | "scope_id">>;
 
-/**
- * Whether the list endpoint can express the view's scope. "My issues → any"
- * is a union of relations only the table channel answers, so its sidebar row
- * opens the page instead of expanding.
- */
-export function viewHasSidebarPreview(view: SidebarViewFields): boolean {
-  if (view.scope_type === "my" && (view.scope_variant ?? "any") === "any") return false;
-  // The list endpoint has no "is not", viewer-relation, due-date or rule-tree
-  // filter; a preview that ignored them would list issues the view excludes.
-  const { raw } = baselineFromQuery(view.query);
-  return (
-    raw.relationFilters.length === 0 &&
-    raw.dueDateFilters.length === 0 &&
-    !pruneAdvancedFilter(raw.advancedFilter) &&
-    effectiveNegatedFilters(raw).length === 0
-  );
+/** A sidebar list read through the table query, which can express every view filter. */
+export interface SidebarTableRequest {
+  table: IssueTableQuerySpec;
 }
 
-function viewScopeParams(view: SidebarViewFields, userId: string | undefined): ListIssuesParams | null {
-  if (view.scope_type === "project") return view.scope_id ? { project_id: view.scope_id } : null;
-  if (view.scope_type !== "my") return {};
-  if (!userId) return null;
-  switch (view.scope_variant) {
-    case "assigned":
-      return { assignee_id: userId };
-    case "created":
-      return { creator_id: userId };
-    case "involved":
-      return { involves_user_id: userId };
+export type SidebarIssuesRequest = ListIssuesParams | SidebarTableRequest;
+
+export const isSidebarTableRequest = (request: SidebarIssuesRequest): request is SidebarTableRequest =>
+  "table" in request;
+
+function viewTableScope(view: SidebarViewFields): IssueTableScope | null {
+  const assigneeTypes = assigneeTypesForActorKind(
+    view.scope_variant === "members" || view.scope_variant === "agents" ? view.scope_variant : undefined,
+  );
+  const typed = assigneeTypes ? { assignee_types: assigneeTypes } : {};
+  switch (view.scope_type ?? "workspace") {
+    case "workspace":
+      return { kind: "workspace", ...typed };
+    case "project":
+      return view.scope_id ? { kind: "project", project_id: view.scope_id, ...typed } : null;
+    case "my": {
+      const variant = view.scope_variant ?? "any";
+      return variant === "assigned" || variant === "created" || variant === "involved" || variant === "any"
+        ? { kind: "my", relation: variant }
+        : null;
+    }
     default:
       return null;
   }
 }
 
-/**
- * List params for an expanded saved view: its scope, filters and ordering, so
- * the sidebar lists what opening the view shows. `null` when the view can
- * match nothing.
- */
-export function viewSidebarParams(
-  view: SidebarViewFields,
-  projects: readonly Pick<Project, "id" | "status">[],
-  userId?: string,
-): ListIssuesParams | null {
-  const scopeParams = viewScopeParams(view, userId);
-  if (!scopeParams) return null;
-  const { raw } = baselineFromQuery(view.query);
-  let projectIds = raw.projectFilters;
-  // The list endpoint has no project-status facet; resolve it to project ids.
-  if (raw.projectStatusFilters.length > 0) {
-    const statuses = new Set<string>(raw.projectStatusFilters);
-    const matching = projects.filter((p) => statuses.has(p.status)).map((p) => p.id);
-    projectIds = projectIds.length > 0 ? projectIds.filter((id) => matching.includes(id)) : matching;
-    if (projectIds.length === 0 && !raw.includeNoProject) return null;
-  }
-
-  const display = view.display ?? {};
-  const sortBy =
-    typeof display.sortBy === "string" &&
-    (VIEW_SORTS.has(display.sortBy) || display.sortBy.startsWith("property:"))
-      ? (display.sortBy as ListIssuesParams["sort_by"])
+function viewTableSort(display: Record<string, unknown>): IssueTableQuerySpec["sort"] {
+  const field =
+    typeof display.sortBy === "string" && (VIEW_SORTS.has(display.sortBy) || display.sortBy.startsWith("property:"))
+      ? (display.sortBy as IssueTableSortField)
       : "position";
-  const assigneeTypes = assigneeTypesForActorKind(
-    view.scope_variant === "members" || view.scope_variant === "agents" ? view.scope_variant : undefined,
-  );
+  return { field, direction: display.sortDirection === "desc" ? "desc" : "asc" };
+}
+
+/**
+ * The request for an expanded saved view: its scope, filters and ordering,
+ * so the sidebar lists what opening the view shows. `null` when the view's
+ * scope cannot be listed.
+ */
+export function viewSidebarRequest(view: SidebarViewFields, today: string): SidebarTableRequest | null {
+  const scope = viewTableScope(view);
+  if (!scope) return null;
+  const { raw } = baselineFromQuery(view.query);
+  // Same as the surface: a project view drops the project dimension, a "my"
+  // view the viewer-relation one.
+  const fields = {
+    ...raw,
+    ...(scope.kind === "project" ? { projectFilters: [], includeNoProject: false } : {}),
+    ...(scope.kind === "my" ? { relationFilters: [] } : {}),
+  };
+  const negate = effectiveNegatedFilters(fields).map((dimension) => FILTER_DIMENSION_TABLE_FIELD[dimension]);
+  const advanced = advancedFilterToTableQuery(fields.advancedFilter);
+  const usesDueDates = fields.dueDateFilters.length > 0 || advancedFilterUsesField(fields.advancedFilter, "dueDate");
+  const display = view.display ?? {};
 
   return {
-    ...scopeParams,
-    ...(raw.statusFilters.length > 0 ? { statuses: raw.statusFilters } : {}),
-    ...(raw.priorityFilters.length > 0 ? { priorities: raw.priorityFilters } : {}),
-    ...(raw.assigneeFilters.length > 0 ? { assignee_filters: raw.assigneeFilters } : {}),
-    ...(raw.includeNoAssignee ? { include_no_assignee: true } : {}),
-    ...(raw.creatorFilters.length > 0 ? { creator_filters: raw.creatorFilters } : {}),
-    ...(projectIds.length > 0 ? { project_ids: projectIds } : {}),
-    ...(raw.includeNoProject ? { include_no_project: true } : {}),
-    ...(raw.labelFilters.length > 0 ? { label_ids: raw.labelFilters } : {}),
-    ...(Object.keys(raw.propertyFilters).length > 0 ? { properties: raw.propertyFilters } : {}),
-    ...(assigneeTypes ? { assignee_types: assigneeTypes } : {}),
-    ...(display.showSubIssues === false ? { top_level_only: true } : {}),
-    sort_by: sortBy,
-    sort_direction: display.sortDirection === "desc" ? "desc" : "asc",
+    table: {
+      scope,
+      filters: {
+        ...(fields.statusFilters.length > 0 ? { statuses: fields.statusFilters } : {}),
+        ...(fields.priorityFilters.length > 0 ? { priorities: fields.priorityFilters } : {}),
+        ...(fields.assigneeFilters.length > 0 ? { assignees: fields.assigneeFilters } : {}),
+        ...(fields.includeNoAssignee ? { include_no_assignee: true } : {}),
+        ...(fields.creatorFilters.length > 0 ? { creators: fields.creatorFilters } : {}),
+        ...(fields.projectFilters.length > 0 ? { project_ids: fields.projectFilters } : {}),
+        ...(fields.includeNoProject ? { include_no_project: true } : {}),
+        ...(fields.projectStatusFilters.length > 0 ? { project_statuses: fields.projectStatusFilters } : {}),
+        ...(fields.labelFilters.length > 0 ? { label_ids: fields.labelFilters } : {}),
+        ...(fields.relationFilters.length > 0 ? { relations: fields.relationFilters } : {}),
+        ...(fields.dueDateFilters.length > 0 ? { due_dates: fields.dueDateFilters } : {}),
+        ...(usesDueDates ? { today } : {}),
+        ...(negate.length > 0 ? { negate } : {}),
+        ...(advanced ? { advanced } : {}),
+        ...(Object.keys(fields.propertyFilters).length > 0 ? { properties: fields.propertyFilters } : {}),
+        include_sub_issues: display.showSubIssues !== false,
+      },
+      sort: viewTableSort(display),
+    },
+  };
+}
+
+/**
+ * The request for an expanded built-in view: the page's scope, listed with
+ * the same sidebar settings as an expanded project. `null` when the settings
+ * leave nothing to list.
+ */
+export function builtinSidebarRequest(
+  builtin: BuiltinViewKey,
+  myRelation: MyIssuesRelation,
+  settings: SidebarIssueSettings,
+  statuses: readonly StatusRef[],
+): SidebarTableRequest | null {
+  const shown = shownSidebarStatuses(settings, statuses);
+  if (shown.length === 0) return null;
+  const relation = builtin === "my_agents" ? "involved" : myRelation === "all" ? "any" : myRelation;
+  const relations: IssueTableRelation[] =
+    settings.assignee === "me" ? ["assigned"] : settings.assignee === "my_agents" ? ["my_agents"] : [];
+  return {
+    table: {
+      scope: builtin === "all_issues" ? { kind: "workspace" } : { kind: "my", relation },
+      filters: {
+        ...(shown.length < statuses.length ? { statuses: shown } : {}),
+        ...(relations.length > 0 ? { relations } : {}),
+        include_sub_issues: settings.showSubIssues,
+      },
+      sort: { field: settings.sortBy, direction: settings.sortDirection },
+    },
   };
 }
 

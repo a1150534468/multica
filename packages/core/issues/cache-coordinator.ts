@@ -600,8 +600,9 @@ export function invalidateIssueDerivatives(
 
 /**
  * Refresh the sidebar lists one issue change can reorder or move it across:
- * lists showing it, its old and new project's lists, and every view list
- * (view membership is a server-side filter the client cannot re-evaluate).
+ * lists showing it, its old and new project's lists, and every view list,
+ * built-in ones included (view membership is a server-side filter the client
+ * cannot re-evaluate).
  */
 export function invalidateSidebarListsForIssue(
   qc: QueryClient,
@@ -616,7 +617,7 @@ export function invalidateSidebarListsForIssue(
     predicate: (query) => {
       const source = query.queryKey[prefix.length];
       if (typeof source !== "string") return false;
-      if (source.startsWith("view:") || projectSources.has(source)) return true;
+      if (source.startsWith("view:") || source.startsWith("builtin:") || projectSources.has(source)) return true;
       const data = query.state.data as ListIssuesResponse | undefined;
       return !!data?.issues?.some((issue) => issue.id === issueId);
     },

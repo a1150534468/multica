@@ -9,7 +9,7 @@ import { agentTaskSnapshotOptions } from "@multica/core/agents";
 import { useIssueStatuses } from "@multica/core/issue-statuses/hooks";
 import { issueStatusCategory } from "@multica/core/issues";
 import { sidebarIssuesOptions } from "@multica/core/issues/queries";
-import { SIDEBAR_FIRST_PAGE, SIDEBAR_PAGE_STEP } from "@multica/core/issues/sidebar-list";
+import { SIDEBAR_FIRST_PAGE, SIDEBAR_PAGE_STEP, type SidebarIssuesRequest } from "@multica/core/issues/sidebar-list";
 import { useWorkspacePaths } from "@multica/core/paths";
 import type { AgentTask, Issue, ListIssuesParams } from "@multica/core/types";
 import { AppLink } from "../../navigation";
@@ -146,7 +146,7 @@ export function SidebarIssueList({
   id: string;
   wsId: string;
   source: string;
-  params: ListIssuesParams | null | undefined;
+  params: SidebarIssuesRequest | null | undefined;
   activeIssueId: string | null;
   onCollapse: () => void;
 }) {

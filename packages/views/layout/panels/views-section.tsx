@@ -22,12 +22,16 @@ import { useWorkspacePaths } from "@multica/core/paths";
 import { sidebarIssuesOptions } from "@multica/core/issues/queries";
 import {
   SIDEBAR_FIRST_PAGE,
-  viewHasSidebarPreview,
-  viewSidebarParams,
+  builtinSidebarRequest,
+  builtinSidebarSource,
+  viewSidebarRequest,
   viewSidebarSource,
+  type SidebarIssuesRequest,
 } from "@multica/core/issues/sidebar-list";
+import { todayDateOnly } from "@multica/core/issues/date";
+import { useIssueStatuses } from "@multica/core/issue-statuses/hooks";
 import { useSidebarTreeStore } from "@multica/core/issues/stores/sidebar-tree-store";
-import { myIssuesViewStore } from "@multica/core/issues/stores/my-issues-view-store";
+import { myIssuesRelationFromScope, myIssuesViewStore } from "@multica/core/issues/stores/my-issues-view-store";
 import {
   issueViewContainerKey,
   useActiveIssueViewStore,
@@ -37,7 +41,6 @@ import { issueViewSeedDefinition } from "@multica/core/issue-views/definition";
 import { useIssueViewRenameStore } from "@multica/core/issue-views/rename-store";
 import { builtinViewItemId, type BuiltinViewKey, type SidebarViewItem } from "@multica/core/issue-views/sidebar-views";
 import { issueViewTarget } from "@multica/core/issue-views/view-target";
-import type { Project } from "@multica/core/types";
 import { useIssueViewActions, type IssueViewActions } from "../../issue-views/use-view-actions";
 import { DeleteViewDialog } from "../../issue-views/delete-view-dialog";
 import { ViewNameInput } from "../../issue-views/view-name-input";
@@ -57,9 +60,7 @@ const ROW_MENU_CLASS = cn(
 
 interface ViewsSectionProps {
   wsId: string;
-  userId: string | undefined;
   pathname: string;
-  projects: Project[];
   plainRowsLit: boolean;
   /** An expanded tree row lists the current issue, so "All issues" stays unlit. */
   issueLitInTree: boolean;
@@ -72,9 +73,7 @@ interface ViewsSectionProps {
  */
 export function ViewsSection({
   wsId,
-  userId,
   pathname,
-  projects,
   plainRowsLit,
   issueLitInTree,
   activeIssueId,
@@ -139,16 +138,15 @@ export function ViewsSection({
                       pathname={pathname}
                       plainRowsLit={plainRowsLit}
                       issueLitInTree={issueLitInTree}
+                      activeIssueId={activeIssueId}
                       actions={actions}
                       drag={drag}
                     />
                   ) : (
                     <SavedViewRow
                       wsId={wsId}
-                      userId={userId}
                       item={item}
                       pathname={pathname}
-                      projects={projects}
                       plainRowsLit={plainRowsLit}
                       activeIssueId={activeIssueId}
                       actions={actions}
@@ -179,6 +177,13 @@ export function ViewsSection({
       />
     </PanelSection>
   );
+}
+
+function usePrefetch(wsId: string, source: string, request: SidebarIssuesRequest | null | undefined) {
+  const qc = useQueryClient();
+  return () => {
+    if (request) void qc.prefetchQuery(sidebarIssuesOptions(wsId, source, request, SIDEBAR_FIRST_PAGE));
+  };
 }
 
 interface DragBindings {
@@ -260,6 +265,7 @@ function BuiltinViewRow({
   pathname,
   plainRowsLit,
   issueLitInTree,
+  activeIssueId,
   actions,
   drag,
 }: {
@@ -268,11 +274,14 @@ function BuiltinViewRow({
   pathname: string;
   plainRowsLit: boolean;
   issueLitInTree: boolean;
+  activeIssueId: string | null;
   actions: IssueViewActions;
   drag: DragBindings;
 }) {
   const { t } = useT("layout");
   const p = useWorkspacePaths();
+  const listId = useId();
+  const linkRef = useRef<HTMLAnchorElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const builtinNav = useBuiltinViewNavigation();
   const myScope = useStore(myIssuesViewStore, (s) => s.scope);
@@ -297,48 +306,77 @@ function BuiltinViewRow({
         : !issueLitInTree && isPathWithin(pathname, p.issues())
       : onMyIssues && activeMyView === null && (builtin === "my_agents") === (myScope === "agents"));
 
+  const source = builtinSidebarSource(builtin);
+  const expanded = useSidebarTreeStore((s) => s.expanded.includes(source));
+  const setExpanded = useSidebarTreeStore((s) => s.setExpanded);
+  const statusCatalog = useIssueStatuses(wsId);
+  const settings = useSidebarTreeStore((s) => s.issueSettings);
+  const request = statusCatalog.isLoaded
+    ? builtinSidebarRequest(builtin, myIssuesRelationFromScope(myScope), settings, statusCatalog.statuses)
+    : undefined;
+  const prefetch = usePrefetch(wsId, source, request);
+
   return (
-    <TreeRow
-      rowRef={drag.rowRef}
-      {...drag.listeners}
-      href={href}
-      label={label}
-      icon={BUILTIN_ICON[builtin]}
-      active={active}
-      onContextMenu={(event) => {
-        event.preventDefault();
-        setMenuOpen(true);
-      }}
-      onNavigate={(event) => {
-        if (drag.consumeDrag()) {
+    <>
+      <TreeRow
+        ref={linkRef}
+        rowRef={drag.rowRef}
+        {...drag.listeners}
+        href={href}
+        label={label}
+        icon={BUILTIN_ICON[builtin]}
+        active={active}
+        expanded={expanded}
+        onExpandedChange={(next) => setExpanded(source, next)}
+        listId={listId}
+        toggleLabel={t(($) => $.panels.work.project_issues, { name: label })}
+        onPrefetch={prefetch}
+        onContextMenu={(event) => {
           event.preventDefault();
-          return;
+          setMenuOpen(true);
+        }}
+        onNavigate={(event) => {
+          if (drag.consumeDrag()) {
+            event.preventDefault();
+            return;
+          }
+          builtinNav.prepare(builtin);
+        }}
+        trailing={
+          <RowMenu label={t(($) => $.panels.work.view_actions, { name: label })} open={menuOpen} onOpenChange={setMenuOpen}>
+            <DropdownMenuItem onClick={() => actions.copyLink(href)}>
+              <Link2 className="size-3.5" />
+              {t(($) => $.panels.work.view_copy_link)}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => actions.sidebar.unstar(builtinViewItemId(builtin))}>
+              <EyeOff className="size-3.5" />
+              {t(($) => $.panels.work.view_remove)}
+            </DropdownMenuItem>
+          </RowMenu>
         }
-        builtinNav.prepare(builtin);
-      }}
-      trailing={
-        <RowMenu label={t(($) => $.panels.work.view_actions, { name: label })} open={menuOpen} onOpenChange={setMenuOpen}>
-          <DropdownMenuItem onClick={() => actions.copyLink(href)}>
-            <Link2 className="size-3.5" />
-            {t(($) => $.panels.work.view_copy_link)}
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => actions.sidebar.unstar(builtinViewItemId(builtin))}>
-            <EyeOff className="size-3.5" />
-            {t(($) => $.panels.work.view_remove)}
-          </DropdownMenuItem>
-        </RowMenu>
-      }
-    />
+      />
+      {expanded && (
+        <SidebarIssueList
+          id={listId}
+          wsId={wsId}
+          source={source}
+          params={request}
+          activeIssueId={activeIssueId}
+          onCollapse={() => {
+            setExpanded(source, false);
+            linkRef.current?.focus();
+          }}
+        />
+      )}
+    </>
   );
 }
 
 function SavedViewRow({
   wsId,
-  userId,
   item,
   pathname,
-  projects,
   plainRowsLit,
   activeIssueId,
   actions,
@@ -346,10 +384,8 @@ function SavedViewRow({
   drag,
 }: {
   wsId: string;
-  userId: string | undefined;
   item: Extract<SidebarViewItem, { kind: "view" }>;
   pathname: string;
-  projects: Project[];
   plainRowsLit: boolean;
   activeIssueId: string | null;
   actions: IssueViewActions;
@@ -373,12 +409,10 @@ function SavedViewRow({
   const startRename = useIssueViewRenameStore((s) => s.start);
   const stopRename = useIssueViewRenameStore((s) => s.stop);
   const source = viewSidebarSource(view.id);
-  const expandedInStore = useSidebarTreeStore((s) => s.expanded.includes(source));
+  const expanded = useSidebarTreeStore((s) => s.expanded.includes(source));
   const setExpanded = useSidebarTreeStore((s) => s.setExpanded);
-  const previewable = viewHasSidebarPreview(view);
-  const expanded = previewable && expandedInStore;
-  const params = previewable ? viewSidebarParams(view, projects, userId) : null;
-  const qc = useQueryClient();
+  const request = viewSidebarRequest(view, todayDateOnly());
+  const prefetch = usePrefetch(wsId, source, request);
   const canManage = actions.canManage(view);
 
   if (renaming) {
@@ -405,17 +439,11 @@ function SavedViewRow({
         label={view.name}
         icon={<Layers className="size-4 shrink-0" />}
         active={active}
-        {...(previewable
-          ? {
-              expanded,
-              onExpandedChange: (next: boolean) => setExpanded(source, next),
-              listId,
-              toggleLabel: t(($) => $.panels.work.project_issues, { name: view.name }),
-              onPrefetch: () => {
-                if (params) void qc.prefetchQuery(sidebarIssuesOptions(wsId, source, params, SIDEBAR_FIRST_PAGE));
-              },
-            }
-          : {})}
+        expanded={expanded}
+        onExpandedChange={(next) => setExpanded(source, next)}
+        listId={listId}
+        toggleLabel={t(($) => $.panels.work.project_issues, { name: view.name })}
+        onPrefetch={prefetch}
         onContextMenu={(event) => {
           event.preventDefault();
           setMenuOpen(true);
@@ -465,7 +493,7 @@ function SavedViewRow({
           id={listId}
           wsId={wsId}
           source={source}
-          params={params}
+          params={request}
           activeIssueId={activeIssueId}
           onCollapse={() => {
             setExpanded(source, false);

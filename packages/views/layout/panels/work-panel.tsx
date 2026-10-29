@@ -88,9 +88,7 @@ export function WorkPanel() {
         {wsId && (
           <ViewsSection
             wsId={wsId}
-            userId={userId}
             pathname={pathname}
-            projects={projects}
             plainRowsLit={plainRowsLit}
             issueLitInTree={issueLitInTree}
             activeIssueId={plainRowsLit ? currentIssueId : null}

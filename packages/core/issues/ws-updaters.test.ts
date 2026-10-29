@@ -1135,6 +1135,12 @@ describe("sidebar issue lists", () => {
   const ownKey = issueKeys.sidebar(WS_ID, `project:${PROJECT_ID}`, params, 5);
   const otherKey = issueKeys.sidebar(WS_ID, "project:project-9", { project_id: "project-9" }, 5);
   const viewKey = issueKeys.sidebar(WS_ID, "view:view-1", {}, 5);
+  const builtinKey = issueKeys.sidebar(
+    WS_ID,
+    "builtin:all_issues",
+    { table: { scope: { kind: "workspace" }, filters: {}, sort: { field: "updated_at", direction: "desc" } } },
+    5,
+  );
   let qc: QueryClient;
 
   beforeEach(() => {
@@ -1142,6 +1148,7 @@ describe("sidebar issue lists", () => {
     qc.setQueryData(ownKey, { issues: [{ ...baseIssue, revision: 1 }], total: 1 });
     qc.setQueryData(otherKey, { issues: [], total: 0 });
     qc.setQueryData(viewKey, { issues: [], total: 0 });
+    qc.setQueryData(builtinKey, { issues: [], total: 0 });
   });
 
   const invalidated = (key: readonly unknown[]) => qc.getQueryState(key)?.isInvalidated;
@@ -1150,6 +1157,7 @@ describe("sidebar issue lists", () => {
     onIssueUpdated(qc, WS_ID, { id: ISSUE_ID, title: "Renamed", revision: 2 });
     expect(invalidated(ownKey)).toBe(true);
     expect(invalidated(viewKey)).toBe(true);
+    expect(invalidated(builtinKey)).toBe(true);
     expect(invalidated(otherKey)).toBe(false);
   });
 

@@ -17,7 +17,9 @@ import type {
   ListGroupedIssuesParams,
   ListIssuesParams,
   ListIssuesCache,
+  ListIssuesResponse,
 } from "../types";
+import type { SidebarIssuesRequest } from "./sidebar-list";
 import { ALL_STATUSES } from "./config";
 import { issueColumnCategory } from "./status-category";
 
@@ -129,11 +131,11 @@ export const issueKeys = {
   /** Every sidebar issue list — prefix for cross-list refresh. */
   sidebarAll: (wsId: string) => [...issueKeys.all(wsId), "sidebar"] as const,
   /**
-   * One expanded sidebar row's issues. `source` (`project:{id}` / `view:{id}`)
+   * One expanded sidebar row's issues. `source` (`project:{id}` / `view:{id}` / `builtin:{key}`)
    * sits at a fixed index so realtime refresh can target a project's lists.
    */
-  sidebar: (wsId: string, source: string, params: ListIssuesParams, limit: number) =>
-    [...issueKeys.sidebarAll(wsId), source, params, limit] as const,
+  sidebar: (wsId: string, source: string, request: SidebarIssuesRequest, limit: number) =>
+    [...issueKeys.sidebarAll(wsId), source, request, limit] as const,
   detail: (wsId: string, id: string) =>
     [...issueKeys.all(wsId), "detail", id] as const,
   /** Resolve a bare issue identifier (e.g. "MUL-123") to an issue. */
@@ -456,16 +458,34 @@ export function projectGanttIssuesOptions(
   });
 }
 
+/** The table query's page cap; a longer sidebar list stops growing there. */
+const SIDEBAR_TABLE_MAX_LIMIT = 100;
+
+async function listSidebarTableIssues(query: IssueTableQuerySpec, limit: number): Promise<ListIssuesResponse> {
+  const page = await api.listIssueTableRows({
+    query,
+    group: { kind: "none" },
+    group_key: null,
+    hierarchy: { enabled: false },
+    parent_id: null,
+    page: { limit: Math.min(limit, SIDEBAR_TABLE_MAX_LIMIT) },
+  });
+  return { issues: page.rows.map((row) => row.issue), total: page.total };
+}
+
 /** The first `limit` issues of a sidebar list, with the filtered total. */
 export function sidebarIssuesOptions(
   wsId: string,
   source: string,
-  params: ListIssuesParams,
+  request: SidebarIssuesRequest,
   limit: number,
 ) {
   return queryOptions({
-    queryKey: issueKeys.sidebar(wsId, source, params, limit),
-    queryFn: () => api.listIssues({ ...params, limit, offset: 0 }),
+    queryKey: issueKeys.sidebar(wsId, source, request, limit),
+    queryFn: () =>
+      "table" in request
+        ? listSidebarTableIssues(request.table, limit)
+        : api.listIssues({ ...request, limit, offset: 0 }),
   });
 }
 

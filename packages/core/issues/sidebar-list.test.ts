@@ -3,9 +3,9 @@ import type { Project } from "../types";
 import {
   projectSidebarParams,
   shownSidebarStatuses,
+  builtinSidebarRequest,
   sidebarProjects,
-  viewHasSidebarPreview,
-  viewSidebarParams,
+  viewSidebarRequest,
 } from "./sidebar-list";
 import {
   DEFAULT_SIDEBAR_ISSUE_SETTINGS,
@@ -56,71 +56,106 @@ describe("projectSidebarParams", () => {
   });
 });
 
-describe("viewSidebarParams", () => {
+describe("viewSidebarRequest", () => {
+  const TODAY = "2026-03-11";
+  const workspace = { display: {}, scope_type: "workspace" as const, scope_variant: null };
+
   it("carries the view's own filters, variant and ordering", () => {
     expect(
-      viewSidebarParams(
+      viewSidebarRequest(
         {
           query: { statusFilters: ["todo"], labelFilters: ["l1"], priorityFilters: ["bogus"] },
           display: { sortBy: "due_date", sortDirection: "desc", showSubIssues: false },
           scope_variant: "agents",
         },
-        [],
+        TODAY,
       ),
     ).toEqual({
-      statuses: ["todo"],
-      label_ids: ["l1"],
-      assignee_types: ["agent", "squad"],
-      top_level_only: true,
-      sort_by: "due_date",
-      sort_direction: "desc",
+      table: {
+        scope: { kind: "workspace", assignee_types: ["agent", "squad"] },
+        filters: { statuses: ["todo"], label_ids: ["l1"], include_sub_issues: false },
+        sort: { field: "due_date", direction: "desc" },
+      },
     });
   });
 
-  it("resolves a project-status filter to project ids, or nothing when none match", () => {
-    const projects = [
-      { id: "p1", status: "in_progress" },
-      { id: "p2", status: "completed" },
-    ] as const;
+  it("keeps the conditions the plain list endpoint could not express", () => {
+    const filters = (query: Record<string, unknown>) => viewSidebarRequest({ ...workspace, query }, TODAY)?.table.filters;
+    expect(filters({ relationFilters: ["assigned"] })).toMatchObject({ relations: ["assigned"] });
+    expect(filters({ statusFilters: ["done"], negatedFilters: ["status"] })).toMatchObject({
+      statuses: ["done"],
+      negate: ["statuses"],
+    });
+    expect(filters({ dueDateFilters: ["overdue"] })).toMatchObject({ due_dates: ["overdue"], today: TODAY });
+    expect(filters({ projectStatusFilters: ["completed"] })).toMatchObject({ project_statuses: ["completed"] });
     expect(
-      viewSidebarParams({ query: { projectStatusFilters: ["completed"] }, display: {}, scope_variant: null }, projects)
-        ?.project_ids,
-    ).toEqual(["p2"]);
-    expect(
-      viewSidebarParams({ query: { projectStatusFilters: ["paused"] }, display: {}, scope_variant: null }, projects),
-    ).toBeNull();
+      filters({
+        advancedFilter: {
+          type: "group",
+          id: "root",
+          match: "any",
+          children: [{ type: "condition", id: "c1", field: "priority", negated: false, values: ["urgent"] }],
+        },
+      }),
+    ).toMatchObject({ advanced: { match: "any", children: [{ field: "priorities", values: ["urgent"] }] } });
+    // "Is not" with nothing selected is not a condition, and no due-date rule needs no day.
+    expect(filters({ negatedFilters: ["status"] })).toEqual({ include_sub_issues: true });
   });
 
   it("scopes project and my views like the page they open", () => {
     const base = { query: {}, display: {} };
-    expect(
-      viewSidebarParams({ ...base, scope_type: "project", scope_id: "p1", scope_variant: null }, []),
-    ).toMatchObject({ project_id: "p1" });
-    expect(
-      viewSidebarParams({ ...base, scope_type: "my", scope_id: null, scope_variant: "created" }, [], "u1"),
-    ).toMatchObject({ creator_id: "u1" });
-    expect(
-      viewSidebarParams({ ...base, scope_type: "my", scope_id: null, scope_variant: "involved" }, [], "u1"),
-    ).toMatchObject({ involves_user_id: "u1" });
-    expect(
-      viewSidebarParams({ ...base, scope_type: "my", scope_id: null, scope_variant: "assigned" }, []),
-    ).toBeNull();
+    const scope = (view: Parameters<typeof viewSidebarRequest>[0]) => viewSidebarRequest(view, TODAY)?.table.scope;
+    expect(scope({ ...base, scope_type: "project", scope_id: "p1", scope_variant: null })).toEqual({
+      kind: "project",
+      project_id: "p1",
+    });
+    expect(scope({ ...base, scope_type: "my", scope_id: null, scope_variant: "created" })).toEqual({
+      kind: "my",
+      relation: "created",
+    });
+    expect(scope({ ...base, scope_type: "my", scope_id: null, scope_variant: null })).toEqual({
+      kind: "my",
+      relation: "any",
+    });
+    expect(scope({ ...base, scope_type: "project", scope_id: null, scope_variant: null })).toBeUndefined();
   });
 
-  it("does not preview the my-any union", () => {
-    expect(viewHasSidebarPreview({ query: {}, display: {}, scope_type: "my", scope_variant: "any" })).toBe(false);
-    expect(viewHasSidebarPreview({ query: {}, display: {}, scope_type: "my", scope_variant: "assigned" })).toBe(true);
-    expect(viewHasSidebarPreview({ query: {}, display: {}, scope_type: "workspace", scope_variant: null })).toBe(true);
+  it("drops the dimension the scope already fixes", () => {
+    const project = viewSidebarRequest(
+      { query: { projectFilters: ["p2"], negatedFilters: ["project"] }, display: {}, scope_type: "project", scope_id: "p1", scope_variant: null },
+      TODAY,
+    );
+    expect(project?.table.filters).toEqual({ include_sub_issues: true });
+    const mine = viewSidebarRequest(
+      { query: { relationFilters: ["created"] }, display: {}, scope_type: "my", scope_id: null, scope_variant: "assigned" },
+      TODAY,
+    );
+    expect(mine?.table.filters).toEqual({ include_sub_issues: true });
+  });
+});
+
+describe("builtinSidebarRequest", () => {
+  it("scopes each built-in like its page and lists with the sidebar settings", () => {
+    const request = (builtin: Parameters<typeof builtinSidebarRequest>[0], relation: Parameters<typeof builtinSidebarRequest>[1] = "assigned") =>
+      builtinSidebarRequest(builtin, relation, DEFAULT_SIDEBAR_ISSUE_SETTINGS, STATUSES)?.table;
+    expect(request("all_issues")).toEqual({
+      scope: { kind: "workspace" },
+      filters: { statuses: ["backlog", "todo", "in_progress", "merged"], include_sub_issues: true },
+      sort: { field: "updated_at", direction: "desc" },
+    });
+    expect(request("my_issues", "created")?.scope).toEqual({ kind: "my", relation: "created" });
+    expect(request("my_issues", "all")?.scope).toEqual({ kind: "my", relation: "any" });
+    expect(request("my_agents", "assigned")?.scope).toEqual({ kind: "my", relation: "involved" });
   });
 
-  it("has no preview for conditions the list endpoint cannot express", () => {
-    const workspace = { display: {}, scope_type: "workspace" as const, scope_variant: null };
-    expect(viewHasSidebarPreview({ ...workspace, query: { relationFilters: ["assigned"] } })).toBe(false);
-    expect(
-      viewHasSidebarPreview({ ...workspace, query: { statusFilters: ["done"], negatedFilters: ["status"] } }),
-    ).toBe(false);
-    // "Is not" with nothing selected is not a condition.
-    expect(viewHasSidebarPreview({ ...workspace, query: { negatedFilters: ["status"] } })).toBe(true);
+  it("maps the assignee setting and lists nothing when every status is hidden", () => {
+    const mine = { ...DEFAULT_SIDEBAR_ISSUE_SETTINGS, hiddenStatuses: [], assignee: "my_agents" as const };
+    expect(builtinSidebarRequest("all_issues", "assigned", mine, STATUSES)?.table.filters).toEqual({
+      relations: ["my_agents"],
+      include_sub_issues: true,
+    });
+    const none = { ...DEFAULT_SIDEBAR_ISSUE_SETTINGS, hiddenStatuses: STATUSES.map((s) => s.key) };
+    expect(builtinSidebarRequest("all_issues", "assigned", none, STATUSES)).toBeNull();
   });
 });
 

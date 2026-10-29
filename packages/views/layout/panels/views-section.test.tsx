@@ -6,9 +6,10 @@ import { renderWithI18n } from "../../test/i18n";
 import { ViewsSection } from "./views-section";
 
 const actions = vi.hoisted(() => ({
-  sidebar: { items: [], reorder: vi.fn() },
+  sidebar: { items: [] as unknown[], reorder: vi.fn(), unstar: vi.fn() },
   create: vi.fn(),
   remove: vi.fn(),
+  canManage: () => true,
 }));
 
 vi.mock("../../issue-views/use-view-actions", () => ({ useIssueViewActions: () => actions }));
@@ -40,6 +41,14 @@ vi.mock("@multica/core/paths", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@multica/core/paths")>();
   return { ...actual, useWorkspacePaths: () => actual.paths.workspace("acme") };
 });
+vi.mock("@multica/core/hooks", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@multica/core/hooks")>()),
+  useWorkspaceId: () => "ws-1",
+}));
+vi.mock("@multica/core/issue-statuses/hooks", async () => {
+  const { buildIssueStatusCatalog } = await import("@multica/core/issue-statuses/queries");
+  return { useIssueStatuses: () => buildIssueStatusCatalog([]) };
+});
 vi.mock("@tanstack/react-query", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-query")>()),
   useQuery: () => ({ data: [] }),
@@ -50,9 +59,7 @@ function renderSection() {
   return renderWithI18n(
     <ViewsSection
       wsId="ws-1"
-      userId="user-1"
       pathname="/acme/issues"
-      projects={[]}
       plainRowsLit
       issueLitInTree={false}
       activeIssueId={null}
@@ -62,6 +69,7 @@ function renderSection() {
 
 beforeEach(() => {
   actions.create.mockReset();
+  actions.sidebar.items = [];
   useSidebarTreeStore.setState({ viewsCollapsed: false });
 });
 
@@ -83,5 +91,27 @@ describe("ViewsSection", () => {
     fireEvent.click(screen.getByRole("button", { name: "New view" }));
     expect(useSidebarTreeStore.getState().viewsCollapsed).toBe(false);
     expect(actions.create).toHaveBeenCalledWith(expect.objectContaining({ renameIn: "sidebar" }));
+  });
+
+  it("lets every view expand, built-in or saved, whatever its filters", () => {
+    actions.sidebar.items = [
+      { id: "builtin:all_issues", kind: "builtin", key: "all_issues" },
+      {
+        id: "view:v1",
+        kind: "view",
+        view: {
+          id: "v1",
+          name: "Not done",
+          scope_type: "workspace",
+          scope_id: null,
+          scope_variant: null,
+          query: { statusFilters: ["done"], negatedFilters: ["status"], relationFilters: ["assigned"] },
+          display: {},
+        },
+      },
+    ];
+    renderSection();
+    expect(screen.getByRole("button", { name: "Issues in All issues" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: "Issues in Not done" })).toHaveAttribute("aria-expanded", "false");
   });
 });
