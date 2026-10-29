@@ -1,17 +1,13 @@
 "use client";
 
-import { useDefaultLayout } from "react-resizable-panels";
 import { ArrowLeft, MessagesSquare } from "@multica/ui/icons";
 import { Button } from "@multica/ui/components/ui/button";
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from "@multica/ui/components/ui/resizable";
 import { useIsCompact } from "@multica/ui/hooks/use-mobile";
 import { useWorkspacePaths } from "@multica/core/paths";
 import { useNavigation } from "../navigation";
 import { useT } from "../i18n";
+import { useListColumnCollapsed } from "../layout/app-shell-context";
+import { ListColumn } from "../layout/list-column";
 import { parseTeamSelection, teamHref } from "./selection";
 import { TeamSidebar } from "./components/team-sidebar";
 import { TeamAgentView } from "./components/team-agent-view";
@@ -30,7 +26,7 @@ export function TeamPage() {
   const wsPaths = useWorkspacePaths();
   const isCompact = useIsCompact();
   const selection = parseTeamSelection(searchParams);
-  const { defaultLayout, onLayoutChanged } = useDefaultLayout({ id: "multica_team_layout" });
+  const listCollapsed = useListColumnCollapsed();
 
   const detail =
     selection.kind === "agent" ? (
@@ -82,27 +78,11 @@ export function TeamPage() {
   }
 
   return (
-    <ResizablePanelGroup
-      orientation="horizontal"
-      className="min-h-0 flex-1"
-      defaultLayout={defaultLayout}
-      onLayoutChanged={onLayoutChanged}
-    >
-      <ResizablePanel
-        id="list"
-        defaultSize={260}
-        minSize={220}
-        maxSize={420}
-        groupResizeBehavior="preserve-pixel-size"
-      >
-        <div className="flex h-full flex-col border-r">
-          <TeamSidebar selection={selection} />
-        </div>
-      </ResizablePanel>
-      <ResizableHandle />
-      <ResizablePanel id="detail" minSize="40%">
-        <div className="flex h-full min-h-0 flex-col">{detail}</div>
-      </ResizablePanel>
-    </ResizablePanelGroup>
+    <div className="flex min-h-0 flex-1">
+      <ListColumn collapsed={listCollapsed}>
+        <TeamSidebar selection={selection} />
+      </ListColumn>
+      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">{detail}</div>
+    </div>
   );
 }
