@@ -46,7 +46,6 @@ vi.mock("../../navigation", () => ({
   ),
 }));
 vi.mock("../../issues/components/status-icon", () => ({ StatusIcon: () => <span /> }));
-vi.mock("../../projects/components/project-icon", () => ({ ProjectIcon: () => <span /> }));
 vi.mock("@multica/ui/components/common/tooltip-hint", () => ({
   TooltipHint: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));

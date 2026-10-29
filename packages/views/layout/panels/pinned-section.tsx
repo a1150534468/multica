@@ -12,7 +12,7 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { X } from "@multica/ui/icons";
+import { Folder, X } from "@multica/ui/icons";
 import { cn } from "@multica/ui/lib/utils";
 import { TooltipHint } from "@multica/ui/components/common/tooltip-hint";
 import { ShimmerText } from "@multica/ui/components/common/shimmer-text";
@@ -28,7 +28,6 @@ import { useWorkspacePaths, type WorkspacePaths } from "@multica/core/paths";
 import type { PinnedItem } from "@multica/core/types";
 import { AppLink } from "../../navigation";
 import { StatusIcon } from "../../issues/components/status-icon";
-import { ProjectIcon } from "../../projects/components/project-icon";
 import { useT } from "../../i18n";
 import { PANEL_ROW_CLASS, PanelList, PanelSection, isPathWithin, panelRowStateClass } from "../panel-nav";
 import { IssueAgentBadge, SIDEBAR_SHIMMER_CLASS, useIssueAgentState } from "./sidebar-tree";
@@ -341,7 +340,7 @@ function PinRow({
       onUnpin={onUnpin}
       label={project.title}
       active={active}
-      iconNode={<ProjectIcon project={project} size="sm" />}
+      iconNode={<Folder className="size-4 shrink-0" />}
     />
   );
 }

@@ -83,7 +83,13 @@ export const TreeRow = forwardRef<HTMLAnchorElement, TreeRowProps>(function Tree
     <div
       {...rowProps}
       ref={rowRef}
-      className={cn(PANEL_ROW_CLASS, panelRowStateClass(active), "group/row relative", className)}
+      className={cn(
+        PANEL_ROW_CLASS,
+        panelRowStateClass(active),
+        "group/row relative",
+        expanded && !active && "font-medium text-foreground",
+        className,
+      )}
     >
       {icon}
       <AppLink
@@ -128,6 +134,11 @@ export const TreeRow = forwardRef<HTMLAnchorElement, TreeRowProps>(function Tree
   );
 });
 
+/** Issues under an expanded row sit flush and a step smaller than the rows
+ *  around them, so a group reads as one block. */
+const TREE_CHILD_ROW_CLASS =
+  "flex min-h-[26px] w-full items-center gap-2 rounded-lg px-2 py-[3px] text-left text-label transition-colors outline-none focus-visible:outline-2 focus-visible:outline-ring";
+
 const EMPTY_PARAMS: ListIssuesParams = {};
 
 /**
@@ -168,17 +179,17 @@ export function SidebarIssueList({
     onCollapse();
   };
 
-  const tailClass = cn(PANEL_ROW_CLASS, panelRowStateClass(false), "gap-1.5 px-2 text-caption text-faint-foreground");
+  const tailClass = cn(TREE_CHILD_ROW_CLASS, panelRowStateClass(false), "gap-1.5 min-h-6 text-caption text-faint-foreground");
 
   return (
-    <ul id={id} className="mt-px ml-[19px] space-y-px border-l border-surface-border pl-2">
+    <ul id={id} className="mb-2 ml-5 border-l border-surface-border pl-1.5">
       {params === undefined || (params && query.isPending) ? (
-        <li className="flex h-8 items-center gap-2.5 px-3">
-          <div className="size-3.5 shrink-0 rounded-full bg-muted" />
+        <li className="flex h-[26px] items-center gap-2 px-2">
+          <div className="size-3 shrink-0 rounded-full bg-muted" />
           <div className="h-3 w-24 rounded-xs bg-muted" />
         </li>
       ) : query.isError || issues.length === 0 ? (
-        <li className="flex h-8 items-center px-3 text-caption text-faint-foreground">
+        <li className="flex h-[26px] items-center px-2 text-caption text-faint-foreground">
           {query.isError
             ? t(($) => $.panels.work.project_issues_error)
             : t(($) => $.panels.work.project_issues_empty)}
@@ -286,14 +297,14 @@ const SidebarIssueRow = memo(function SidebarIssueRow({
       newTabTitle={issue.title}
       aria-current={active ? "page" : undefined}
       onKeyDown={onKeyDown}
-      className={cn(PANEL_ROW_CLASS, panelRowStateClass(active), "px-2")}
+      className={cn(TREE_CHILD_ROW_CLASS, panelRowStateClass(active))}
     >
       <StatusIcon
         status={issue.status}
         color={statusColor}
         icon={statusIcon}
         category={issueStatusCategory(issue) ?? undefined}
-        className="size-3.5 shrink-0"
+        className="size-3 shrink-0"
       />
       <ShimmerText active={!!agents?.running} className={cn("min-w-0 flex-1 truncate", SIDEBAR_SHIMMER_CLASS)}>
         {issue.title}

@@ -6,7 +6,7 @@ import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type D
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { restrictToFirstScrollableAncestor, restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { CSS } from "@dnd-kit/utilities";
-import { Plus } from "@multica/ui/icons";
+import { Folder, Plus } from "@multica/ui/icons";
 import { cn } from "@multica/ui/lib/utils";
 import { IconButton } from "@multica/ui/components/common/icon-button";
 import { useIssueStatuses } from "@multica/core/issue-statuses/hooks";
@@ -21,7 +21,6 @@ import { useSidebarTreeStore } from "@multica/core/issues/stores/sidebar-tree-st
 import { useModalStore } from "@multica/core/modals";
 import { useWorkspacePaths } from "@multica/core/paths";
 import type { ListIssuesParams, ListIssuesResponse, Project } from "@multica/core/types";
-import { ProjectIcon } from "../../projects/components/project-icon";
 import { useT } from "../../i18n";
 import { PanelCount, PanelLink, PanelList, PanelSection, isPathWithin } from "../panel-nav";
 import { ProjectsSectionSettings } from "./sidebar-settings";
@@ -199,7 +198,7 @@ function ProjectTreeItem({
         {...listeners}
         href={p.projectDetail(project.id)}
         label={project.title}
-        icon={<ProjectIcon project={project} size="sm" />}
+        icon={<Folder className="size-4 shrink-0" />}
         active={active}
         expanded={expanded}
         onExpandedChange={setExpanded}
