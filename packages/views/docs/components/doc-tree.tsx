@@ -53,11 +53,11 @@ import { TREE_ROW_BUTTON_CLASS, TreeRow } from "../../layout/panels/sidebar-tree
 import { MoveDialog, type MoveTarget } from "./move-dialog";
 import { useDocCommands } from "./use-doc-commands";
 
-const ROW_ACTION_CLASS = cn(
-  TREE_ROW_BUTTON_CLASS,
-  "text-muted-foreground opacity-0 group-hover/row:opacity-100 data-[popup-open]:opacity-100 [@media(pointer:coarse)]:opacity-100",
-);
-const NESTED_LIST_CLASS = "mt-px ml-[19px] space-y-px border-l border-surface-border pl-2";
+const ROW_ACTION_CLASS = cn(TREE_ROW_BUTTON_CLASS, "text-muted-foreground");
+// Out of the layout until the row is hovered or focused, so labels get the full width.
+const ROW_ACTIONS_CLASS =
+  "hidden shrink-0 items-center group-focus-within/row:flex group-hover/row:flex has-[[data-popup-open]]:flex [@media(pointer:coarse)]:flex";
+const NESTED_LIST_CLASS = "mt-px ml-5 space-y-px border-l border-surface-border pl-1.5";
 const DRAG_TYPE = "application/x-multica-doc-node";
 
 type DragItem = { kind: "doc" | "folder"; id: string };
@@ -203,31 +203,33 @@ function DocRow({ doc, state }: { doc: DocSummary; state: TreeState }) {
             {doc.unread && (
               <span aria-label={t(($) => $.tree.unread)} className="size-1.5 shrink-0 rounded-full bg-brand group-hover/row:hidden" />
             )}
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <button
-                    type="button"
-                    aria-label={t(($) => $.tree.more, { title: doc.title })}
-                    onPointerDown={(event) => event.stopPropagation()}
-                    className={ROW_ACTION_CLASS}
-                  />
-                }
-              >
-                <MoreHorizontal className="size-3.5" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" side="right" className="w-auto min-w-44">
-                <DropdownMenuItem onClick={() => state.onMove({ kind: "doc", id: doc.id, title: doc.title })}>
-                  <FolderInput />
-                  {t(($) => $.actions.move)}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem variant="destructive" onClick={() => state.onDelete(doc)}>
-                  <Trash2 />
-                  {t(($) => $.actions.delete)}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <span className={ROW_ACTIONS_CLASS}>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <button
+                      type="button"
+                      aria-label={t(($) => $.tree.more, { title: doc.title })}
+                      onPointerDown={(event) => event.stopPropagation()}
+                      className={ROW_ACTION_CLASS}
+                    />
+                  }
+                >
+                  <MoreHorizontal className="size-3.5" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" side="right" className="w-auto min-w-44">
+                  <DropdownMenuItem onClick={() => state.onMove({ kind: "doc", id: doc.id, title: doc.title })}>
+                    <FolderInput />
+                    {t(($) => $.actions.move)}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem variant="destructive" onClick={() => state.onDelete(doc)}>
+                    <Trash2 />
+                    {t(($) => $.actions.delete)}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </span>
           </>
         }
       />
@@ -318,78 +320,80 @@ function FolderRow({
             {!expanded && unread > 0 && (
               <span aria-label={t(($) => $.tree.unread)} className="size-1.5 shrink-0 rounded-full bg-brand group-hover/row:hidden" />
             )}
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <button
-                    type="button"
-                    aria-label={t(($) => $.tree.add_in, { title: folder.title })}
-                    onPointerDown={(event) => event.stopPropagation()}
-                    className={ROW_ACTION_CLASS}
-                  />
-                }
-              >
-                <Plus className="size-3.5" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" side="right" className="w-auto min-w-44">
-                <DropdownMenuItem onClick={() => newDoc("markdown", folder.id)}>
-                  <FileText />
-                  {t(($) => $.actions.new_doc)}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => newDoc("html", folder.id)}>
-                  <FileCode />
-                  {t(($) => $.actions.new_html_doc)}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => {
-                    expand();
-                    state.setNaming({ parentId: folder.id });
-                  }}
-                >
-                  <FolderPlus />
-                  {t(($) => $.actions.new_folder)}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <button
-                    type="button"
-                    aria-label={t(($) => $.tree.more, { title: folder.title })}
-                    onPointerDown={(event) => event.stopPropagation()}
-                    className={ROW_ACTION_CLASS}
-                  />
-                }
-              >
-                <MoreHorizontal className="size-3.5" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" side="right" className="w-auto min-w-44">
-                <DropdownMenuItem onClick={() => state.setRenaming(folder.id)}>
-                  <Pencil />
-                  {t(($) => $.actions.rename)}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => state.onMove({ kind: "folder", id: folder.id, title: folder.title })}>
-                  <FolderInput />
-                  {t(($) => $.actions.move)}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  variant="destructive"
-                  disabled={!empty}
-                  title={empty ? undefined : t(($) => $.tree.delete_folder_not_empty)}
-                  onClick={() =>
-                    deleteFolder.mutate(folder.id, {
-                      onError: (error) =>
-                        toast.error(error instanceof Error ? error.message : t(($) => $.errors.delete)),
-                    })
+            <span className={ROW_ACTIONS_CLASS}>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <button
+                      type="button"
+                      aria-label={t(($) => $.tree.add_in, { title: folder.title })}
+                      onPointerDown={(event) => event.stopPropagation()}
+                      className={ROW_ACTION_CLASS}
+                    />
                   }
                 >
-                  <Trash2 />
-                  {empty ? t(($) => $.actions.delete) : t(($) => $.tree.delete_folder_not_empty)}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  <Plus className="size-3.5" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" side="right" className="w-auto min-w-44">
+                  <DropdownMenuItem onClick={() => newDoc("markdown", folder.id)}>
+                    <FileText />
+                    {t(($) => $.actions.new_doc)}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => newDoc("html", folder.id)}>
+                    <FileCode />
+                    {t(($) => $.actions.new_html_doc)}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      expand();
+                      state.setNaming({ parentId: folder.id });
+                    }}
+                  >
+                    <FolderPlus />
+                    {t(($) => $.actions.new_folder)}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <button
+                      type="button"
+                      aria-label={t(($) => $.tree.more, { title: folder.title })}
+                      onPointerDown={(event) => event.stopPropagation()}
+                      className={ROW_ACTION_CLASS}
+                    />
+                  }
+                >
+                  <MoreHorizontal className="size-3.5" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" side="right" className="w-auto min-w-44">
+                  <DropdownMenuItem onClick={() => state.setRenaming(folder.id)}>
+                    <Pencil />
+                    {t(($) => $.actions.rename)}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => state.onMove({ kind: "folder", id: folder.id, title: folder.title })}>
+                    <FolderInput />
+                    {t(($) => $.actions.move)}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    variant="destructive"
+                    disabled={!empty}
+                    title={empty ? undefined : t(($) => $.tree.delete_folder_not_empty)}
+                    onClick={() =>
+                      deleteFolder.mutate(folder.id, {
+                        onError: (error) =>
+                          toast.error(error instanceof Error ? error.message : t(($) => $.errors.delete)),
+                      })
+                    }
+                  >
+                    <Trash2 />
+                    {empty ? t(($) => $.actions.delete) : t(($) => $.tree.delete_folder_not_empty)}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </span>
           </>
         }
       />
