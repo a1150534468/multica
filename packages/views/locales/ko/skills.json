@@ -350,8 +350,8 @@
   },
   "file_viewer": {
     "no_content": "*아직 내용이 없습니다*",
-    "markdown_placeholder": "입력하거나 /로 명령어…",
+    "markdown_placeholder": "Markdown으로 작성…",
     "raw_placeholder": "파일 내용...",
-    "raw_aria": "{{path}}의 일반 텍스트 내용"
+    "raw_aria": "{{path}}의 소스"
   }
 }

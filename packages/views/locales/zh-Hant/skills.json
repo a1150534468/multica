@@ -350,8 +350,8 @@
   },
   "file_viewer": {
     "no_content": "*暫無內容*",
-    "markdown_placeholder": "開始寫，或輸入 / 叫出命令…",
+    "markdown_placeholder": "用 Markdown 撰寫…",
     "raw_placeholder": "檔案內容...",
-    "raw_aria": "{{path}} 的純文字內容"
+    "raw_aria": "{{path}} 的原始碼"
   }
 }

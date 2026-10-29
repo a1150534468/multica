@@ -8,7 +8,7 @@ import type { Skill } from "@multica/core/types";
 import { I18nProvider } from "@multica/core/i18n/react";
 import enCommon from "../../locales/en/common.json";
 import enSkills from "../../locales/en/skills.json";
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { useState } from "react";
 import { NavigationProvider, type NavigationAdapter } from "../../navigation";
 
 const TEST_RESOURCES = { en: { common: enCommon, skills: enSkills } };
@@ -97,30 +97,6 @@ vi.mock("../../rich-content", () => ({
     <div data-testid="preview">{content}</div>
   ),
 }));
-// The rich editor, reduced to its contract: a controlled value, onUpdate on
-// typing, onReady once mounted, and an imperative focus.
-vi.mock("../../editor", () => ({
-  ContentEditor: forwardRef(function FakeEditor(
-    {
-      value,
-      onUpdate,
-      onReady,
-    }: { value: string; onUpdate: (markdown: string) => void; onReady?: () => void },
-    ref,
-  ) {
-    const el = useRef<HTMLTextAreaElement>(null);
-    useImperativeHandle(ref, () => ({ focus: () => el.current?.focus() }));
-    useEffect(() => onReady?.(), []); // eslint-disable-line react-hooks/exhaustive-deps
-    return (
-      <textarea
-        ref={el}
-        aria-label="Markdown editor"
-        value={value}
-        onChange={(e) => onUpdate(e.target.value)}
-      />
-    );
-  }),
-}));
 vi.mock("../../labels/resource-label-picker", () => ({
   ResourceLabelPicker: () => <div data-testid="labels" />,
 }));
@@ -135,7 +111,10 @@ vi.mock("@multica/ui/components/common/actor-avatar", () => ({
 import { api } from "@multica/core/api";
 import { SkillDetailPage } from "./skill-detail-page";
 
-const markdownEditor = () => screen.getByLabelText("Markdown editor") as HTMLTextAreaElement;
+const source = (path: string) =>
+  screen.getByRole("textbox", { name: `Source of ${path}` }) as HTMLTextAreaElement;
+const findSource = async (path: string) =>
+  (await screen.findByRole("textbox", { name: `Source of ${path}` })) as HTMLTextAreaElement;
 
 const LONG_DESCRIPTION =
   "Animation for product interfaces — when to animate and when not to. " +
@@ -223,13 +202,13 @@ describe("SkillDetailPage file selection", () => {
   it("opens SKILL.md beside the skill's properties, with no tabs", async () => {
     renderPage();
     expect(await screen.findByLabelText("Description")).toBeTruthy();
-    expect(markdownEditor().value).toBe("# Interface Animations");
+    expect(source("SKILL.md").value).toBe(baseSkill.content);
     expect(screen.queryByRole("tab")).toBeNull();
   });
 
   it("opens the file named in ?file=, keeping the skill's properties beside it", async () => {
     renderPage(new URLSearchParams("file=patterns.md"));
-    expect(((await screen.findByLabelText("Markdown editor")) as HTMLTextAreaElement).value).toBe("# Patterns");
+    expect((await findSource("patterns.md")).value).toBe("# Patterns\n");
     expect(screen.getByText("Reference file of aiforui-animations")).toBeTruthy();
     expect(screen.getByLabelText("Description")).toBeTruthy();
   });
@@ -242,7 +221,7 @@ describe("SkillDetailPage file selection", () => {
 
     fireEvent.click(toggle);
     expect(screen.queryByLabelText("Description")).toBeNull();
-    expect(markdownEditor()).toBeTruthy();
+    expect(source("SKILL.md")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Details" }));
     expect(screen.getByLabelText("Description")).toBeTruthy();
@@ -279,56 +258,54 @@ describe("SkillDetailPage file selection", () => {
     await userEvent.click(screen.getByRole("button", { name: "Add" }));
 
     expect(replace).toHaveBeenLastCalledWith(`${PATHNAME}?file=notes.md`);
-    expect(markdownEditor().value).toBe("");
-    expect(document.activeElement).toBe(markdownEditor());
+    expect(source("notes.md").value).toBe("");
+    expect(document.activeElement).toBe(source("notes.md"));
   });
 });
 
 describe("SkillDetailPage editor", () => {
-  it("edits markdown in the rich editor, with no preview or edit switch", async () => {
+  it("edits the whole file as source, with no preview or edit switch", async () => {
     renderPage();
-    expect(((await screen.findByLabelText("Markdown editor")) as HTMLTextAreaElement).value).toBe(
-      "# Interface Animations",
-    );
+    expect((await findSource("SKILL.md")).value).toBe(baseSkill.content);
     for (const name of ["Preview", "Edit", "Plain text"]) {
       expect(screen.queryByRole("button", { name })).toBeNull();
     }
   });
 
-  it("keeps the frontmatter and surrounding blank lines when the body changes", async () => {
+  it("saves exactly what was typed: frontmatter, prompt tags, placeholders, list markers", async () => {
     vi.mocked(api.updateSkill).mockImplementation(async (_id, payload) => ({
       ...(skillRef.current as Skill),
       ...payload,
       updated_at: "2026-07-29T11:00:00Z",
     }) as Skill);
+    const typed =
+      "---\nname: aiforui-animations\ndisable-model-invocation: true\n---\n\n" +
+      "<instructions>\nUse {{reviewer_name}} and snake_case_names.\n</instructions>\n\n" +
+      "* star bullet\n1) paren list\n\n| a | b |\n|---|---|\n";
     renderPage();
-    fireEvent.change(await screen.findByLabelText("Markdown editor"), {
-      target: { value: "# Interface Animations\n\nMore" },
-    });
+    fireEvent.change(await findSource("SKILL.md"), { target: { value: typed } });
     await userEvent.click(screen.getByRole("button", { name: /Save changes/ }));
 
-    expect(vi.mocked(api.updateSkill).mock.calls[0]![1].content).toBe(
-      "---\nname: aiforui-animations\n---\n\n# Interface Animations\n\nMore\n",
-    );
+    expect(vi.mocked(api.updateSkill).mock.calls[0]![1].content).toBe(typed);
   });
 
-  it("edits other files as plain text", async () => {
+  it("edits other files as source too", async () => {
     skillRef.current = {
       ...baseSkill,
       files: [{ id: "f-2", path: "scripts/run.sh", content: "echo hi\n" } as Skill["files"][number]],
     };
     renderPage(new URLSearchParams("file=scripts/run.sh"));
-    const field = (await screen.findByRole("textbox", { name: /scripts\/run\.sh/ })) as HTMLTextAreaElement;
-    expect(field.value).toBe("echo hi\n");
-    expect(screen.queryByLabelText("Markdown editor")).toBeNull();
+    expect((await findSource("scripts/run.sh")).value).toBe("echo hi\n");
   });
 
-  it("shows read-only viewers the rendered file and no file actions", async () => {
+  it("shows read-only viewers the rendered file, without frontmatter or file actions", async () => {
     canEditRef.current = false;
-    renderPage(new URLSearchParams("file=patterns.md"));
+    renderPage();
 
-    expect((await screen.findByTestId("preview")).textContent).toContain("# Patterns");
-    expect(screen.queryByLabelText("Markdown editor")).toBeNull();
+    const preview = await screen.findByTestId("preview");
+    expect(preview.textContent).toContain("# Interface Animations");
+    expect(preview.textContent).not.toContain("name: aiforui-animations");
+    expect(screen.queryByRole("textbox", { name: /^Source of/ })).toBeNull();
     for (const name of ["New file", "Rename", "Delete file"]) {
       expect(screen.queryByRole("button", { name })).toBeNull();
     }
@@ -363,7 +340,7 @@ describe("SkillDetailPage save pill", () => {
 
   it("counts a supporting-file edit as one changed file", async () => {
     renderPage(new URLSearchParams("file=patterns.md"));
-    fireEvent.change(await screen.findByLabelText("Markdown editor"), {
+    fireEvent.change(await findSource("patterns.md"), {
       target: { value: "edited content" },
     });
     expect(screen.getByText("Changed: 1 file")).toBeTruthy();
@@ -443,7 +420,7 @@ describe("SkillDetailPage draft baseline (MUL-5645)", () => {
       content: `${baseSkill.content}\n## Added remotely\n`,
     });
 
-    await waitFor(() => expect(markdownEditor().value).toContain("Added remotely"));
+    await waitFor(() => expect(source("SKILL.md").value).toContain("Added remotely"));
     expect(screen.queryByText(CONFLICT_BANNER)).toBeNull();
     expect(screen.queryByText(/^Changed:/)).toBeNull();
   });

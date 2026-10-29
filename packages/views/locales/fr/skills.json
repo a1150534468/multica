@@ -364,8 +364,8 @@
   },
   "file_viewer": {
     "no_content": "*Aucun contenu pour l'instant*",
-    "markdown_placeholder": "Écrivez, ou tapez / pour les commandes…",
+    "markdown_placeholder": "Écrivez en Markdown…",
     "raw_placeholder": "Contenu du fichier...",
-    "raw_aria": "Contenu en texte brut de {{path}}"
+    "raw_aria": "Source de {{path}}"
   }
 }

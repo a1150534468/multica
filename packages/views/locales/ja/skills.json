@@ -350,8 +350,8 @@
   },
   "file_viewer": {
     "no_content": "*まだ内容がありません*",
-    "markdown_placeholder": "入力するか / でコマンド…",
+    "markdown_placeholder": "Markdown で記述…",
     "raw_placeholder": "ファイルの内容...",
-    "raw_aria": "{{path}} のプレーンテキスト"
+    "raw_aria": "{{path}} のソース"
   }
 }

@@ -364,8 +364,8 @@
   },
   "file_viewer": {
     "no_content": "*No content yet*",
-    "markdown_placeholder": "Write, or type / for commands…",
+    "markdown_placeholder": "Write in Markdown…",
     "raw_placeholder": "File content...",
-    "raw_aria": "Plain text content of {{path}}"
+    "raw_aria": "Source of {{path}}"
   }
 }
