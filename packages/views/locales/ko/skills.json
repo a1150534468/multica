@@ -199,11 +199,6 @@
       "updated": "{{when}} 업데이트",
       "updated_by": "{{name}}이(가) {{when}} 업데이트"
     },
-    "tabs": {
-      "aria": "스킬 섹션",
-      "overview": "개요",
-      "files_other": "파일 {{count}}"
-    },
     "overview": {
       "properties": "속성",
       "properties_hint": "이 필드는 SKILL.md 프런트매터와 동기화됩니다.",
@@ -220,15 +215,12 @@
       "character_count": "{{count}}자"
     },
     "files": {
-      "list_aria": "스킬 파일",
-      "main": "기본 파일",
-      "supporting_other": "보조 파일 {{count}}",
-      "supporting_empty": "보조 파일이 없습니다.",
       "add_file": "새 파일",
       "mode_aria": "파일 보기",
       "mode_preview": "미리보기",
       "mode_edit": "편집",
-      "mode_raw": "일반 텍스트"
+      "mode_raw": "일반 텍스트",
+      "reference_of": "{{name}}의 참조 파일"
     }
   },
   "create": {
@@ -357,12 +349,8 @@
     "conflict_name_still_exists": "해당 이름이 이미 있습니다. 다른 이름을 선택하거나 건너뛰세요."
   },
   "file_tree": {
-    "no_files": "파일 없음",
     "actions": {
-      "label": "{{path}} 작업",
-      "edit": "편집",
-      "rename": "이름 변경",
-      "delete": "삭제"
+      "rename": "이름 변경"
     }
   },
   "file_viewer": {

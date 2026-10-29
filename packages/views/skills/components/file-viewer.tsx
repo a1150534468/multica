@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { Textarea } from "@multica/ui/components/ui/textarea";
 import { parseFrontmatter } from "@multica/core/skills/frontmatter";
 import { RichContent } from "../../rich-content";
+import { cn } from "@multica/ui/lib/utils";
 import { useT } from "../../i18n";
 
 /**
@@ -22,8 +23,8 @@ export function isMarkdownPath(path: string) {
  * Body of a single skill file.
  *
  * Frontmatter is stripped from the preview because `name` / `description` are
- * surfaced as first-class properties on the Overview tab — rendering them
- * again here was the third copy of the same two fields.
+ * surfaced as first-class properties above SKILL.md — rendering them again
+ * here was the third copy of the same two fields.
  */
 export function FileViewer({
   path,
@@ -31,6 +32,7 @@ export function FileViewer({
   mode,
   readOnly,
   autoFocus,
+  autoHeight = false,
   onChange,
   onFocusHandled,
 }: {
@@ -40,6 +42,8 @@ export function FileViewer({
   readOnly: boolean;
   /** Set by "Edit": put the caret in this file's editor once it renders. */
   autoFocus?: boolean;
+  /** Grow with the content (inside a page that scrolls) instead of filling the parent. */
+  autoHeight?: boolean;
   onChange: (content: string) => void;
   /** Called once the caret has landed, so the request is not replayed. */
   onFocusHandled?: () => void;
@@ -72,7 +76,7 @@ export function FileViewer({
   // Non-markdown files have nothing to preview; they are always raw.
   if (isMd && mode === "preview") {
     return (
-      <div className="h-full overflow-y-auto">
+      <div className={autoHeight ? undefined : "h-full overflow-y-auto"}>
         {/* pb-24: keeps the last lines readable under the floating save pill. */}
         <div className="mx-auto max-w-[68ch] px-6 pb-24 pt-7 sm:px-8">
           <RichContent
@@ -97,7 +101,10 @@ export function FileViewer({
           ? t(($) => $.file_viewer.markdown_placeholder)
           : t(($) => $.file_viewer.raw_placeholder)
       }
-      className="h-full min-h-full resize-none rounded-none border-0 px-6 pb-24 pt-5 font-mono text-body leading-relaxed read-only:cursor-default focus-visible:ring-0 sm:px-8"
+      className={cn(
+        autoHeight ? "min-h-64 field-sizing-content" : "h-full min-h-full",
+        "resize-none rounded-none border-0 px-6 pb-24 pt-5 font-mono text-body leading-relaxed read-only:cursor-default focus-visible:ring-0 sm:px-8",
+      )}
     />
   );
 }

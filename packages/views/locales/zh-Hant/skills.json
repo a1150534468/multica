@@ -199,11 +199,6 @@
       "updated": "{{when}}更新",
       "updated_by": "{{name}} 於{{when}}更新"
     },
-    "tabs": {
-      "aria": "技能分區",
-      "overview": "概覽",
-      "files_other": "檔案 {{count}}"
-    },
     "overview": {
       "properties": "屬性",
       "properties_hint": "這些欄位與 SKILL.md 的 frontmatter 保持同步。",
@@ -220,15 +215,12 @@
       "character_count": "{{count}} 個字元"
     },
     "files": {
-      "list_aria": "技能檔案",
-      "main": "主檔案",
-      "supporting_other": "附屬檔案 {{count}}",
-      "supporting_empty": "暫無附屬檔案。",
       "add_file": "新建檔案",
       "mode_aria": "檔案檢視",
       "mode_preview": "預覽",
       "mode_edit": "編輯",
-      "mode_raw": "純文字"
+      "mode_raw": "純文字",
+      "reference_of": "{{name}} 的參考檔案"
     }
   },
   "create": {
@@ -357,12 +349,8 @@
     "conflict_name_still_exists": "這個名稱仍然已存在。請換一個名稱或跳過。"
   },
   "file_tree": {
-    "no_files": "無檔案",
     "actions": {
-      "label": "{{path}} 的操作",
-      "edit": "編輯",
-      "rename": "重新命名",
-      "delete": "刪除"
+      "rename": "重新命名"
     }
   },
   "file_viewer": {

@@ -78,7 +78,6 @@ import {
   totalFileCount,
   type OriginInfo,
 } from "../lib/origin";
-import { FileTree } from "./file-tree";
 import { FileViewer, isMarkdownPath, type FileMode } from "./file-viewer";
 import {
   AddToAgentDialog,
@@ -158,20 +157,6 @@ function hasLocalEdits(draft: SkillDraft, baseline: SkillDraft | null): boolean 
   );
 }
 
-/**
- * Two tabs, not three. A skill has no settings axis to speak of:
- * `UpdateSkillRequest` carries only name / description / content / config /
- * files, and edit rights are derived (creator or workspace admin) with no
- * writable counterpart — so a Settings tab would hold a delete button and a
- * read-only sentence. Delete lives in the header instead, matching the agent
- * detail page where Archive sits in the header.
- */
-type DetailView = "overview" | "files";
-
-function isDetailView(value: string | null): value is DetailView {
-  return value === "overview" || value === "files";
-}
-
 // File path validation + inline add
 
 export function useValidateNewFilePath() {
@@ -200,16 +185,20 @@ export function useValidateNewFilePath() {
 
 function AddFileInline({
   existingPaths,
+  initialPath = "",
+  submitLabel,
   onAdd,
   onCancel,
 }: {
   existingPaths: string[];
+  initialPath?: string;
+  submitLabel?: string;
   onAdd: (path: string) => void;
   onCancel: () => void;
 }) {
   const { t } = useT("skills");
   const validate = useValidateNewFilePath();
-  const [path, setPath] = useState("");
+  const [path, setPath] = useState(initialPath);
   const [error, setError] = useState("");
 
   const submit = () => {
@@ -244,7 +233,7 @@ function AddFileInline({
       )}
       <div className="mt-1.5 flex items-center gap-1.5">
         <Button type="button" size="xs" onClick={submit}>
-          {t(($) => $.detail.add_file.add)}
+          {submitLabel ?? t(($) => $.detail.add_file.add)}
         </Button>
         <Button type="button" size="xs" variant="ghost" onClick={onCancel}>
           {t(($) => $.detail.add_file.cancel)}
@@ -551,9 +540,15 @@ function OverviewTab({
   );
 }
 
-// Files tab
+// Selected file
 
-function FilesTab({
+/**
+ * The open file: a toolbar and its body. The file list lives in the
+ * knowledge base panel's tree, so the page shows one file at a time; the
+ * toolbar keeps the file actions that used to sit on the tree's rows.
+ */
+function FileSection({
+  skillName,
   filePaths,
   selectedPath,
   selectedContent,
@@ -561,17 +556,17 @@ function FilesTab({
   canEdit,
   addingFile,
   focusEditor,
-  onSelectPath,
+  autoHeight,
   onModeChange,
   onStartAddFile,
   onAddFile,
   onCancelAddFile,
   onDeleteFile,
   onRenameFile,
-  onEditFile,
   onContentChange,
   onFocusHandled,
 }: {
+  skillName: string;
   filePaths: string[];
   selectedPath: string;
   selectedContent: string;
@@ -579,109 +574,40 @@ function FilesTab({
   canEdit: boolean;
   addingFile: boolean;
   focusEditor: boolean;
-  onSelectPath: (path: string) => void;
+  /** Grow with the content inside a scrolling page instead of filling it. */
+  autoHeight: boolean;
   onModeChange: (mode: FileMode) => void;
   onStartAddFile: () => void;
   onAddFile: (path: string) => void;
   onCancelAddFile: () => void;
   onDeleteFile: (path?: string) => void;
   onRenameFile: (from: string, to: string) => void;
-  onEditFile: (path: string) => void;
   onContentChange: (content: string) => void;
   onFocusHandled: () => void;
 }) {
   const { t } = useT("skills");
-  const validatePath = useValidateNewFilePath();
-  const supportingPaths = filePaths.filter((p) => p !== SKILL_MD);
+  const [renaming, setRenaming] = useState(false);
   const isMd = isMarkdownPath(selectedPath);
-  // Absent for read-only viewers so the tree never offers an action it would
-  // then refuse. Both rails get the same object: SKILL.md keeps Edit and loses
-  // rename/delete, which the tree derives from reservedPath.
-  const treeActions = canEdit
-    ? {
-        onEdit: onEditFile,
-        validatePath,
-        onRename: onRenameFile,
-        onDelete: onDeleteFile,
-        reservedPath: SKILL_MD,
-      }
-    : undefined;
+  const isMain = selectedPath === SKILL_MD;
 
   return (
-    <div className={cn(PAGE_RAIL, "flex min-h-full flex-col md:h-full md:flex-row")}>
-      {/* The file list IS the second-level navigation, so it uses the same
-          rail treatment as the agent detail page's capability/settings nav
-          instead of inventing a third sidebar style. */}
-      <aside
-        role="tablist"
-        aria-orientation="vertical"
-        aria-label={t(($) => $.detail.files.list_aria)}
-        className={cn(
-          "shrink-0 border-b border-surface-border py-3 md:w-52 md:overflow-y-auto md:border-b-0 md:border-r md:py-4",
-          PAGE_GUTTER,
-        )}
-      >
-        <p className="px-2.5 pb-1 text-micro font-semibold uppercase tracking-wider text-muted-foreground">
-          {t(($) => $.detail.files.main)}
-        </p>
-        <FileTree
-          actions={treeActions}
-          filePaths={[SKILL_MD]}
-          selectedPath={selectedPath}
-          onSelect={onSelectPath}
-        />
-
-        <p className="px-2.5 pb-1 pt-3 text-micro font-semibold uppercase tracking-wider text-muted-foreground">
-          {t(($) => $.detail.files.supporting, { count: supportingPaths.length })}
-        </p>
-        {supportingPaths.length > 0 ? (
-          <FileTree
-            actions={treeActions}
-            filePaths={supportingPaths}
-            selectedPath={selectedPath}
-            onSelect={onSelectPath}
-          />
-        ) : (
-          !addingFile && (
-            <p className="px-2.5 py-1 text-caption text-muted-foreground">
-              {t(($) => $.detail.files.supporting_empty)}
-            </p>
-          )
-        )}
-
-        {canEdit &&
-          (addingFile ? (
-            <AddFileInline
-              existingPaths={filePaths}
-              onAdd={onAddFile}
-              onCancel={onCancelAddFile}
-            />
-          ) : (
-            <Button
-              type="button"
-              variant="ghost"
-              size="xs"
-              onClick={onStartAddFile}
-              className="mt-2 h-8 w-full justify-start px-2.5 text-muted-foreground"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              {t(($) => $.detail.files.add_file)}
-            </Button>
-          ))}
-      </aside>
-
-      <section className="flex min-h-[32rem] min-w-0 flex-1 flex-col md:min-h-0">
-        <div className="flex h-10 shrink-0 items-center gap-3 border-b px-3 sm:px-4">
-          <span className="truncate font-mono text-caption text-muted-foreground">
-            {selectedPath}
+    <section className={cn("flex min-w-0 flex-col", autoHeight ? "" : "min-h-0 flex-1")}>
+      <div className="sticky top-0 z-10 shrink-0 border-b bg-background">
+        <div className={cn(PAGE_RAIL, PAGE_GUTTER, "flex h-10 items-center gap-3")}>
+          <span className="flex min-w-0 items-center gap-1.5 truncate text-caption text-muted-foreground">
+            <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            {!isMain && (
+              <span className="hidden shrink-0 sm:inline">
+                {t(($) => $.detail.files.reference_of, { name: skillName })}
+              </span>
+            )}
+            <span className="truncate font-mono text-foreground">{selectedPath}</span>
           </span>
           <div className="ml-auto flex shrink-0 items-center gap-1">
             {isMd && (
               // The second segment is named for what it does for THIS viewer:
               // "Edit" when the pane it opens accepts typing, "Plain text"
-              // when the same pane is read-only. Same mode either way — only
-              // the promise differs, and offering an edit the page would
-              // refuse is the thing this rail is careful not to do.
+              // when the same pane is read-only.
               <div
                 role="group"
                 aria-label={t(($) => $.detail.files.mode_aria)}
@@ -709,7 +635,45 @@ function FilesTab({
                 ))}
               </div>
             )}
-            {selectedPath !== SKILL_MD && canEdit && (
+            {canEdit && (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={onStartAddFile}
+                      className="text-muted-foreground"
+                      aria-label={t(($) => $.detail.files.add_file)}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </Button>
+                  }
+                />
+                <TooltipContent>{t(($) => $.detail.files.add_file)}</TooltipContent>
+              </Tooltip>
+            )}
+            {!isMain && canEdit && (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => setRenaming(true)}
+                      className="text-muted-foreground"
+                      aria-label={t(($) => $.file_tree.actions.rename)}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                  }
+                />
+                <TooltipContent>{t(($) => $.file_tree.actions.rename)}</TooltipContent>
+              </Tooltip>
+            )}
+            {!isMain && canEdit && (
               <Tooltip>
                 <TooltipTrigger
                   render={
@@ -730,21 +694,40 @@ function FilesTab({
             )}
           </div>
         </div>
+        {(addingFile || renaming) && canEdit && (
+          <div className={cn(PAGE_RAIL, PAGE_GUTTER, "max-w-md pb-3")}>
+            {renaming ? (
+              <AddFileInline
+                existingPaths={filePaths.filter((path) => path !== selectedPath)}
+                initialPath={selectedPath}
+                submitLabel={t(($) => $.file_tree.actions.rename)}
+                onAdd={(to) => {
+                  setRenaming(false);
+                  if (to !== selectedPath) onRenameFile(selectedPath, to);
+                }}
+                onCancel={() => setRenaming(false)}
+              />
+            ) : (
+              <AddFileInline existingPaths={filePaths} onAdd={onAddFile} onCancel={onCancelAddFile} />
+            )}
+          </div>
+        )}
+      </div>
 
-        <div className="min-h-0 flex-1">
-          <FileViewer
-            key={selectedPath}
-            path={selectedPath}
-            content={selectedContent}
-            mode={mode}
-            readOnly={!canEdit}
-            autoFocus={focusEditor}
-            onChange={onContentChange}
-            onFocusHandled={onFocusHandled}
-          />
-        </div>
-      </section>
-    </div>
+      <div className={autoHeight ? "" : "min-h-0 flex-1"}>
+        <FileViewer
+          key={selectedPath}
+          path={selectedPath}
+          content={selectedContent}
+          mode={mode}
+          readOnly={!canEdit}
+          autoFocus={focusEditor}
+          autoHeight={autoHeight}
+          onChange={onContentChange}
+          onFocusHandled={onFocusHandled}
+        />
+      </div>
+    </section>
   );
 }
 
@@ -795,7 +778,6 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
   const [description, setDescription] = useState("");
   const [content, setContent] = useState("");
   const [files, setFiles] = useState<DraftFile[]>([]);
-  const [selectedPath, setSelectedPath] = useState(SKILL_MD);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -813,24 +795,15 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
   // selection moves before the effect runs.
   const [focusPath, setFocusPath] = useState<string | null>(null);
 
-  const urlView = navigation.searchParams.get("view");
-  const [activeView, setActiveView] = useState<DetailView>(() =>
-    isDetailView(urlView) ? urlView : "overview",
-  );
-  const lastUrlViewRef = useRef(urlView);
-
-  useEffect(() => {
-    if (urlView === lastUrlViewRef.current) return;
-    lastUrlViewRef.current = urlView;
-    setActiveView(isDetailView(urlView) ? urlView : "overview");
-  }, [urlView]);
-
-  const selectView = useCallback(
-    (next: DetailView) => {
-      setActiveView(next);
+  // The open file lives in the URL (`?file=`), so the knowledge base tree can
+  // link straight to it and the selection survives a reload.
+  const urlFile = navigation.searchParams.get("file");
+  const setSelectedPath = useCallback(
+    (path: string) => {
       const params = new URLSearchParams(navigation.searchParams);
-      if (next === "overview") params.delete("view");
-      else params.set("view", next);
+      params.delete("view");
+      if (path === SKILL_MD) params.delete("file");
+      else params.set("file", path);
       const query = params.toString();
       navigation.replace(`${navigation.pathname}${query ? `?${query}` : ""}`);
     },
@@ -870,11 +843,10 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
    * pieces can never drift apart.
    */
   const adoptServerVersion = useCallback(
-    (s: Skill, resetSelection = false) => {
+    (s: Skill) => {
       seededKeyRef.current = `${wsId}:${s.id}@${s.updated_at}`;
       setConflictPending(false);
       seedFromSkill(s);
-      if (resetSelection) setSelectedPath(SKILL_MD);
     },
     [wsId, seedFromSkill],
   );
@@ -903,7 +875,7 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
       return;
     }
 
-    adoptServerVersion(skill, !sameSkill);
+    adoptServerVersion(skill);
   }, [skill, wsId, adoptServerVersion, name, description, content, files]);
 
   const creator = useMemo<MemberWithUser | null>(
@@ -933,13 +905,8 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
     return map;
   }, [content, files]);
   const filePaths = useMemo(() => Array.from(fileMap.keys()), [fileMap]);
+  const selectedPath = urlFile && fileMap.has(urlFile) ? urlFile : SKILL_MD;
   const selectedContent = fileMap.get(selectedPath) ?? "";
-
-  useEffect(() => {
-    if (selectedPath !== SKILL_MD && !fileMap.has(selectedPath)) {
-      setSelectedPath(SKILL_MD);
-    }
-  }, [fileMap, selectedPath]);
 
   // Compared against the seeded baseline, not against the latest server skill,
   // so a remote update can never read as a local edit. Files are matched by id
@@ -1035,29 +1002,16 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
     setFiles((prev) => [...prev, { path, content: "" }]);
     setSelectedPath(path);
     setAddingFile(false);
+    // A new file is empty: open it ready to type rather than on a blank preview.
+    setFileMode("raw");
+    setFocusPath(path);
   };
 
-  // Defaults to the open file so the editor's own delete button keeps working;
-  // the tree passes the row that was acted on, which need not be the open one.
   const handleDeleteFile = (path: string = selectedPath) => {
     if (path === SKILL_MD) return;
     setFiles((prev) => prev.filter((f) => f.path !== path));
     if (path === selectedPath) setSelectedPath(SKILL_MD);
   };
-
-  // "Edit" from a row menu is one gesture that owes three things: the file is
-  // open, the pane is the editor rather than the preview, and the caret is in
-  // it. Doing fewer would leave the user another click away from typing, which
-  // is the whole reason the entry exists.
-  const handleEditFile = useCallback(
-    (path: string) => {
-      if (!canEdit) return;
-      setSelectedPath(path);
-      setFileMode("raw");
-      setFocusPath(path);
-    },
-    [canEdit],
-  );
 
   const handleFocusHandled = useCallback(() => setFocusPath(null), []);
 
@@ -1066,8 +1020,8 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
     setFiles((prev) =>
       prev.map((f) => (f.path === from ? { ...f, path: to } : f)),
     );
-    // Follow the file: the rail is keyed by path, so leaving the selection on
-    // the old one would land on a row that no longer exists.
+    // Follow the file: the selection is a path in the URL, so leaving it on
+    // the old one would fall back to SKILL.md.
     if (from === selectedPath) setSelectedPath(to);
   };
 
@@ -1145,23 +1099,48 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
       : null,
   ].filter((part): part is string => part !== null);
 
-  const TABS: { id: DetailView; label: string }[] = [
-    { id: "overview", label: t(($) => $.detail.tabs.overview) },
-    {
-      id: "files",
-      label: t(($) => $.detail.tabs.files, { count: totalFileCount(skill) }),
-    },
-  ];
+  const fileSection = (autoHeight: boolean) => (
+    <FileSection
+      skillName={skill.name}
+      filePaths={filePaths}
+      selectedPath={selectedPath}
+      selectedContent={selectedContent}
+      mode={fileMode}
+      canEdit={canEdit}
+      addingFile={addingFile}
+      focusEditor={focusPath === selectedPath}
+      autoHeight={autoHeight}
+      onModeChange={setFileMode}
+      onStartAddFile={() => setAddingFile(true)}
+      onAddFile={handleAddFile}
+      onCancelAddFile={() => setAddingFile(false)}
+      onDeleteFile={handleDeleteFile}
+      onRenameFile={handleRenameFile}
+      onContentChange={handleFileContentChange}
+      onFocusHandled={handleFocusHandled}
+    />
+  );
 
   return (
     // relative: positioning anchor for the floating save pill (page-centered,
     // same rule as the skills list batch toolbar).
     <div className="relative flex flex-1 min-h-0 flex-col">
       <BreadcrumbHeader
-        segments={[{ href: paths.skills(), label: t(($) => $.page.title) }]}
+        segments={[
+          { href: paths.skills(), label: t(($) => $.page.title) },
+          ...(selectedPath === SKILL_MD
+            ? []
+            : [
+                {
+                  href: paths.skillDetail(skill.id),
+                  label: skill.name,
+                  className: "min-w-0 max-w-48 truncate font-mono text-caption",
+                },
+              ]),
+        ]}
         leaf={
           <span className="truncate font-mono text-caption text-foreground">
-            {skill.name}
+            {selectedPath === SKILL_MD ? skill.name : selectedPath}
           </span>
         }
         actions={
@@ -1245,40 +1224,6 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
         </div>
       )}
 
-      <SkillIdentity
-        skill={skill}
-        origin={origin}
-        originRuntime={originRuntime}
-        agentCount={skillAgents.length}
-        creator={creator}
-      />
-
-      <div
-        className="shrink-0 overflow-x-auto border-b"
-        role="tablist"
-        aria-label={t(($) => $.detail.tabs.aria)}
-      >
-        <div className={cn(PAGE_RAIL, PAGE_GUTTER, "flex items-center gap-6")}>
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              aria-selected={activeView === tab.id}
-              onClick={() => selectView(tab.id)}
-              className={cn(
-                "relative shrink-0 py-3 text-body font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-                activeView === tab.id
-                  ? "text-foreground after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
       {conflictPending && canEdit && (
         <div
           role="status"
@@ -1299,13 +1244,15 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
         </div>
       )}
 
-      <div
-        className={cn(
-          "min-h-0 flex-1 overflow-y-auto",
-          activeView === "files" && "md:overflow-hidden",
-        )}
-      >
-        {activeView === "overview" ? (
+      {selectedPath === SKILL_MD ? (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <SkillIdentity
+            skill={skill}
+            origin={origin}
+            originRuntime={originRuntime}
+            agentCount={skillAgents.length}
+            creator={creator}
+          />
           <OverviewTab
             skill={skill}
             name={name}
@@ -1317,30 +1264,13 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
             onDescriptionChange={setDescription}
             onAddToAgents={() => setShowAddToAgents(true)}
           />
-        ) : (
-          <FilesTab
-            filePaths={filePaths}
-            selectedPath={selectedPath}
-            selectedContent={selectedContent}
-            mode={fileMode}
-            canEdit={canEdit}
-            addingFile={addingFile}
-            focusEditor={focusPath === selectedPath}
-            onSelectPath={setSelectedPath}
-            onModeChange={setFileMode}
-            onStartAddFile={() => setAddingFile(true)}
-            onAddFile={handleAddFile}
-            onCancelAddFile={() => setAddingFile(false)}
-            onDeleteFile={handleDeleteFile}
-            onRenameFile={handleRenameFile}
-            onEditFile={handleEditFile}
-            onContentChange={handleFileContentChange}
-            onFocusHandled={handleFocusHandled}
-          />
-        )}
-      </div>
+          {fileSection(true)}
+        </div>
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col">{fileSection(false)}</div>
+      )}
 
-      {/* Page-level so it covers edits made on either tab. Dirty-only and
+      {/* Page-level so it covers edits made to any file or field. Dirty-only and
           floating, matching the skills list batch toolbar; anchored to the
           page root (relative), NOT the viewport. */}
       {canEdit && isDirty && (

@@ -199,11 +199,6 @@
       "updated": "{{when}}更新",
       "updated_by": "{{name}} 于{{when}}更新"
     },
-    "tabs": {
-      "aria": "技能分区",
-      "overview": "概览",
-      "files_other": "文件 {{count}}"
-    },
     "overview": {
       "properties": "属性",
       "properties_hint": "这些字段与 SKILL.md 的 frontmatter 保持同步。",
@@ -220,15 +215,12 @@
       "character_count": "{{count}} 个字符"
     },
     "files": {
-      "list_aria": "技能文件",
-      "main": "主文件",
-      "supporting_other": "附属文件 {{count}}",
-      "supporting_empty": "暂无附属文件。",
       "add_file": "新建文件",
       "mode_aria": "文件视图",
       "mode_preview": "预览",
       "mode_edit": "编辑",
-      "mode_raw": "纯文本"
+      "mode_raw": "纯文本",
+      "reference_of": "{{name}} 的参考文件"
     }
   },
   "create": {
@@ -357,12 +349,8 @@
     "conflict_name_still_exists": "这个名称仍然已存在。请换一个名称或跳过。"
   },
   "file_tree": {
-    "no_files": "无文件",
     "actions": {
-      "label": "{{path}} 的操作",
-      "edit": "编辑",
-      "rename": "重命名",
-      "delete": "删除"
+      "rename": "重命名"
     }
   },
   "file_viewer": {

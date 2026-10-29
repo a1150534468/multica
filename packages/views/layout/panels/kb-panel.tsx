@@ -19,7 +19,8 @@ import { useT } from "../../i18n";
 import { DocTree, docRouteTarget } from "../../docs/components/doc-tree";
 import { useDocCommands } from "../../docs/components/use-doc-commands";
 import { CreateSkillDialog } from "../../skills/components/create-skill-dialog";
-import { PanelBody, PanelCount, PanelHeader, PanelLink, PanelList, PanelSection, isPathWithin } from "../panel-nav";
+import { SkillPanelTree } from "../../skills/components/skill-panel-tree";
+import { PanelBody, PanelCount, PanelHeader, PanelLink, PanelList, PanelSection } from "../panel-nav";
 
 /** The knowledge base: docs in nested folders, and the workspace's skills. */
 export function KbPanel() {
@@ -100,19 +101,8 @@ export function KbPanel() {
         </PanelSection>
 
         <PanelSection label={layoutT(($) => $.nav.skills)} action={<PanelCount value={skills.length} className="pr-2" />}>
-          <PanelList>
-            {skills.map((skill) => {
-              const href = p.skillDetail(skill.id);
-              return (
-                <PanelLink
-                  key={skill.id}
-                  href={href}
-                  label={skill.name}
-                  active={isPathWithin(pathname, href)}
-                  icon={<BookOpenText />}
-                />
-              );
-            })}
+          {wsId && <SkillPanelTree wsId={wsId} skills={skills} />}
+          <PanelList className="mt-px">
             <PanelLink
               href={p.skills()}
               label={t(($) => $.panel.all_skills)}

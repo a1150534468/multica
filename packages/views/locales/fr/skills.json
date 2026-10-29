@@ -211,12 +211,6 @@
       "updated": "Mis à jour {{when}}",
       "updated_by": "Mis à jour {{when}} par {{name}}"
     },
-    "tabs": {
-      "aria": "Sections du skill",
-      "overview": "Vue d'ensemble",
-      "files_one": "Fichiers {{count}}",
-      "files_other": "Fichiers {{count}}"
-    },
     "overview": {
       "properties": "Propriétés",
       "properties_hint": "Ces champs restent synchronisés avec le frontmatter du SKILL.md.",
@@ -234,16 +228,12 @@
       "character_count": "{{count}} caractères"
     },
     "files": {
-      "list_aria": "Fichiers du skill",
-      "main": "Fichier principal",
-      "supporting_one": "Annexes {{count}}",
-      "supporting_other": "Annexes {{count}}",
-      "supporting_empty": "Aucun fichier annexe.",
       "add_file": "Nouveau fichier",
       "mode_aria": "Vue du fichier",
       "mode_preview": "Aperçu",
       "mode_edit": "Modifier",
-      "mode_raw": "Texte brut"
+      "mode_raw": "Texte brut",
+      "reference_of": "Fichier de référence de {{name}}"
     }
   },
   "create": {
@@ -374,12 +364,8 @@
     "conflict_name_still_exists": "Ce nom existe déjà. Choisissez-en un autre ou ignorez."
   },
   "file_tree": {
-    "no_files": "Aucun fichier",
     "actions": {
-      "label": "Actions pour {{path}}",
-      "edit": "Modifier",
-      "rename": "Renommer",
-      "delete": "Supprimer"
+      "rename": "Renommer"
     }
   },
   "file_viewer": {

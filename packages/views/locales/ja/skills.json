@@ -199,11 +199,6 @@
       "updated": "{{when}}に更新",
       "updated_by": "{{name}} が{{when}}に更新"
     },
-    "tabs": {
-      "aria": "スキルのセクション",
-      "overview": "概要",
-      "files_other": "ファイル {{count}}"
-    },
     "overview": {
       "properties": "プロパティ",
       "properties_hint": "これらの項目は SKILL.md のフロントマターと同期します。",
@@ -220,15 +215,12 @@
       "character_count": "{{count}} 文字"
     },
     "files": {
-      "list_aria": "スキルのファイル",
-      "main": "メインファイル",
-      "supporting_other": "補助ファイル {{count}}",
-      "supporting_empty": "補助ファイルはありません。",
       "add_file": "新規ファイル",
       "mode_aria": "ファイル表示",
       "mode_preview": "プレビュー",
       "mode_edit": "編集",
-      "mode_raw": "プレーンテキスト"
+      "mode_raw": "プレーンテキスト",
+      "reference_of": "{{name}} の参照ファイル"
     }
   },
   "create": {
@@ -357,12 +349,8 @@
     "conflict_name_still_exists": "その名前はすでに存在します。別の名前を選択するか、スキップしてください。"
   },
   "file_tree": {
-    "no_files": "ファイルなし",
     "actions": {
-      "label": "{{path}} の操作",
-      "edit": "編集",
-      "rename": "名前を変更",
-      "delete": "削除"
+      "rename": "名前を変更"
     }
   },
   "file_viewer": {
