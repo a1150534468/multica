@@ -125,7 +125,10 @@
     "restore_done": "已恢复为新版本",
     "revert_done": "已撤销，生成了新版本",
     "revert_conflict": "之后的改动碰到了同样的行，无法自动撤销",
-    "changed_meanwhile": "刚才有人保存了新版本，请重试"
+    "changed_meanwhile": "刚才有人保存了新版本，请重试",
+    "nothing_changed": "文档已经是这个样子，没有需要改的内容",
+    "title_changed": "标题",
+    "load_failed": "无法加载这个版本"
   },
   "folder": {
     "empty": "这个文件夹是空的"

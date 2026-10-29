@@ -125,7 +125,10 @@
     "restore_done": "新しいバージョンとして復元しました",
     "revert_done": "新しいバージョンとして取り消しました",
     "revert_conflict": "後の編集が同じ行に触れているため、自動では取り消せません",
-    "changed_meanwhile": "その間に誰かが保存しました。もう一度お試しください"
+    "changed_meanwhile": "その間に誰かが保存しました。もう一度お試しください",
+    "nothing_changed": "ドキュメントはすでにこの内容です。変更はありません",
+    "title_changed": "タイトル",
+    "load_failed": "このバージョンを読み込めませんでした"
   },
   "folder": {
     "empty": "このフォルダは空です"

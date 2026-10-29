@@ -127,7 +127,10 @@
     "restore_done": "Restaurée comme nouvelle version",
     "revert_done": "Modification annulée dans une nouvelle version",
     "revert_conflict": "Des modifications ultérieures touchent les mêmes lignes ; annulation automatique impossible",
-    "changed_meanwhile": "Quelqu'un a enregistré entre-temps — réessayez"
+    "changed_meanwhile": "Quelqu'un a enregistré entre-temps — réessayez",
+    "nothing_changed": "Rien à changer : le document est déjà dans cet état",
+    "title_changed": "Titre",
+    "load_failed": "Impossible de charger cette version"
   },
   "folder": {
     "empty": "Ce dossier est vide"

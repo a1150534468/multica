@@ -7,6 +7,7 @@ import {
   diffWords,
   lineStats,
   mergeText,
+  revertTitle,
   revertVersion,
   splitMarkdownBlocks,
 } from "./merge";
@@ -106,6 +107,20 @@ describe("revertVersion", () => {
 
   it("refuses when later edits overlap the reverted lines", () => {
     expect(revertVersion("a\nb", "a\nB", "a\nBB")).toBeNull();
+  });
+});
+
+describe("revertTitle", () => {
+  it("undoes a rename that nobody changed since", () => {
+    expect(revertTitle("Old", "New", "New")).toBe("Old");
+  });
+
+  it("keeps the current title when the version did not rename", () => {
+    expect(revertTitle("Same", "Same", "Renamed later")).toBe("Renamed later");
+  });
+
+  it("refuses to overwrite a later rename", () => {
+    expect(revertTitle("Old", "New", "Newer")).toBeNull();
   });
 });
 

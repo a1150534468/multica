@@ -127,7 +127,10 @@
     "restore_done": "Restored as a new version",
     "revert_done": "Change undone as a new version",
     "revert_conflict": "Later edits touch the same lines, so this change can't be undone automatically",
-    "changed_meanwhile": "Someone saved in the meantime — try again"
+    "changed_meanwhile": "Someone saved in the meantime — try again",
+    "nothing_changed": "Nothing to change — the doc already matches",
+    "title_changed": "Title",
+    "load_failed": "Couldn't load this version"
   },
   "folder": {
     "empty": "This folder is empty"

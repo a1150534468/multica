@@ -16,6 +16,7 @@ import {
   docVersionsOptions,
   folderAncestry,
   isDocRevisionConflict,
+  revertTitle,
   revertVersion,
   useUpdateDoc,
   type BlockChange,
@@ -40,10 +41,10 @@ function useVersionContent(wsId: string, docId: string, number: number, latest: 
   });
 }
 
-function WordDiff({ before, after }: { before: string; after: string }) {
+function WordDiff({ before, after, className }: { before: string; after: string; className?: string }) {
   const ops = useMemo(() => diffWords(before, after), [before, after]);
   return (
-    <p className="whitespace-pre-wrap text-body-lg leading-[1.7]">
+    <p className={cn("whitespace-pre-wrap text-body-lg leading-[1.7]", className)}>
       {ops.map((op, i) =>
         op.op === "eq" ? (
           <span key={i}>{op.value}</span>
@@ -61,7 +62,7 @@ function WordDiff({ before, after }: { before: string; after: string }) {
   );
 }
 
-function BlockDiff({ changes, html }: { changes: BlockChange[]; html: boolean }) {
+function BlockDiff({ changes, html, titleChanged }: { changes: BlockChange[]; html: boolean; titleChanged: boolean }) {
   const { t } = useT("docs");
   const render = (block: string) =>
     html ? (
@@ -70,6 +71,7 @@ function BlockDiff({ changes, html }: { changes: BlockChange[]; html: boolean })
       <ReadonlyContent content={block} />
     );
   if (changes.every((c) => c.kind === "same")) {
+    if (titleChanged) return null;
     return <p className="py-8 text-center text-caption text-muted-foreground">{t(($) => $.history.no_changes)}</p>;
   }
   return (
@@ -190,20 +192,31 @@ function HistoryBody({ doc, versions, since }: { doc: Doc; versions: DocVersion[
   const before = useVersionContent(wsId, doc.id, range.from, latest);
   const after = useVersionContent(wsId, doc.id, range.to, latest);
   const ready = (range.from === 0 || before.data) && after.data;
+  const loadFailed = !ready && (before.isError || after.isError);
   const changes = useMemo(
     () => (ready ? diffMarkdownBlocks(before.data?.content ?? "", after.data?.content ?? "") : []),
     [ready, before.data, after.data],
   );
+  const titleBefore = before.data?.title ?? "";
+  const titleAfter = after.data?.title ?? "";
+  const titleChanged = !!ready && range.from > 0 && titleBefore !== titleAfter;
 
   const selected = versions.find((v) => v.number === range.to);
 
-  const write = (body: { content?: string; action: "restore" | "revert"; action_ref: number }) => {
+  const write = (body: { title?: string; content?: string; action: "restore" | "revert"; action_ref: number }) => {
     update.mutate(
       { id: doc.id, base_revision: doc.revision, ...body },
       {
-        onSuccess: () => {
+        // Restores and reverts always append, so an unchanged count means the
+        // server found nothing to change and wrote no version.
+        onSuccess: (saved) => {
+          if (saved.version_count <= latest) {
+            toast(t(($) => $.history.nothing_changed));
+            return;
+          }
           toast.success(body.action === "restore" ? t(($) => $.history.restore_done) : t(($) => $.history.revert_done));
-          setRange({ from: latest, to: latest + 1 });
+          void qc.invalidateQueries({ queryKey: docVersionsOptions(wsId, doc.id).queryKey });
+          setRange({ from: saved.version_count - 1, to: saved.version_count });
         },
         onError: (error) =>
           toast.error(
@@ -221,16 +234,32 @@ function HistoryBody({ doc, versions, since }: { doc: Doc; versions: DocVersion[
 
   const revert = async () => {
     try {
-      const [parent, version] = await Promise.all([
-        range.to > 1 ? qc.fetchQuery(docVersionOptions(wsId, doc.id, range.to - 1)) : Promise.resolve({ content: "" }),
-        qc.fetchQuery(docVersionOptions(wsId, doc.id, range.to)),
-      ]);
-      const content = revertVersion(parent?.content ?? "", version?.content ?? "", doc.content);
-      if (content === null) {
+      const version = await qc.fetchQuery(docVersionOptions(wsId, doc.id, range.to));
+      // Undoing the first version empties the body; the doc keeps its title.
+      const parent =
+        range.to > 1
+          ? await qc.fetchQuery(docVersionOptions(wsId, doc.id, range.to - 1))
+          : { content: "", title: version?.title ?? doc.title };
+      if (!version || !parent) {
+        toast.error(t(($) => $.history.load_failed));
+        return;
+      }
+      const content = revertVersion(parent.content ?? "", version.content ?? "", doc.content);
+      const title = revertTitle(parent.title, version.title, doc.title);
+      if (content === null || title === null) {
         toast.error(t(($) => $.history.revert_conflict));
         return;
       }
-      write({ content, action: "revert", action_ref: range.to });
+      if (content === doc.content && title === doc.title) {
+        toast(t(($) => $.history.nothing_changed));
+        return;
+      }
+      write({
+        ...(content !== doc.content ? { content } : {}),
+        ...(title !== doc.title ? { title } : {}),
+        action: "revert",
+        action_ref: range.to,
+      });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t(($) => $.errors.save));
     }
@@ -273,7 +302,30 @@ function HistoryBody({ doc, versions, since }: { doc: Doc; versions: DocVersion[
         </div>
         <div className="prose-document mx-auto w-full max-w-3xl px-6 py-6 sm:px-10">
           {ready ? (
-            <BlockDiff changes={changes} html={doc.format === "html"} />
+            <>
+              {titleChanged && (
+                <div className="mb-6 rounded-md border-l-2 border-warning bg-warning/5 px-3 py-2">
+                  <div className="mb-1 text-caption text-muted-foreground">{t(($) => $.history.title_changed)}</div>
+                  <WordDiff before={titleBefore} after={titleAfter} className="text-title font-semibold leading-snug" />
+                </div>
+              )}
+              <BlockDiff changes={changes} html={doc.format === "html"} titleChanged={titleChanged} />
+            </>
+          ) : loadFailed ? (
+            <div className="flex flex-col items-center gap-2 py-12 text-center">
+              <AlertCircle className="size-6 text-faint-foreground" />
+              <p className="text-caption text-muted-foreground">{t(($) => $.history.load_failed)}</p>
+              <Button
+                size="xs"
+                variant="outline"
+                onClick={() => {
+                  if (before.isError) void before.refetch();
+                  if (after.isError) void after.refetch();
+                }}
+              >
+                {t(($) => $.editor.retry)}
+              </Button>
+            </div>
           ) : (
             <div className="space-y-3">
               <Skeleton className="h-4 w-full" />

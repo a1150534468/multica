@@ -251,6 +251,16 @@ export function revertVersion(parent: string, version: string, current: string):
 }
 
 /**
+ * {@link revertVersion} for the title: puts back the parent's title if the
+ * version renamed the doc and nobody renamed it since. Returns null when a
+ * later rename would be overwritten.
+ */
+export function revertTitle(parent: string, version: string, current: string): string | null {
+  if (parent === version || current === parent) return current;
+  return current === version ? parent : null;
+}
+
+/**
  * Markdown blocks for display diffs: runs of non-blank lines, with fenced code
  * kept whole even across blank lines.
  */

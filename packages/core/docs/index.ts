@@ -31,6 +31,7 @@ export {
   merge3,
   mergeText,
   applyTheirs,
+  revertTitle,
   revertVersion,
   splitMarkdownBlocks,
   diffMarkdownBlocks,

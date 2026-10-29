@@ -125,7 +125,10 @@
     "restore_done": "已還原為新版本",
     "revert_done": "已撤銷，產生了新版本",
     "revert_conflict": "之後的改動碰到了同樣的行，無法自動撤銷",
-    "changed_meanwhile": "剛才有人儲存了新版本，請重試"
+    "changed_meanwhile": "剛才有人儲存了新版本，請重試",
+    "nothing_changed": "文件已經是這個樣子，沒有需要改的內容",
+    "title_changed": "標題",
+    "load_failed": "無法載入這個版本"
   },
   "folder": {
     "empty": "這個資料夾是空的"
