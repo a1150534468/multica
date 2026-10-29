@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useStore } from "zustand";
 import { toast } from "sonner";
 import {
@@ -19,6 +19,7 @@ import {
   Star,
   EyeOff,
   Filter,
+  ListTree,
   Trash2,
   Users,
 } from "@multica/ui/icons";
@@ -55,6 +56,7 @@ import {
   isIssueViewModified,
   issueViewDefinitionFromState,
   issueViewSeedDefinition,
+  modifiedFilterDimensions,
 } from "@multica/core/issue-views/definition";
 import { useIssueViewRenameStore } from "@multica/core/issue-views/rename-store";
 import {
@@ -68,6 +70,10 @@ import {
 } from "@multica/core/issues/stores/issues-scope-store";
 import { actorKindForViewVariant } from "@multica/core/issues/surface/scope";
 import { useViewStore, useViewStoreApi } from "@multica/core/issues/stores/view-store-context";
+import {
+  countAdvancedConditions,
+  type NegatableFilterDimension,
+} from "@multica/core/issues/stores/filter-tree";
 import type { Project } from "@multica/core/types";
 import { PageHeader } from "../layout/page-header";
 import { RefreshablePageIcon } from "../layout/refreshable-page-icon";
@@ -89,6 +95,7 @@ export type IssueViewHeaderBase =
   | { kind: "project"; project: Project };
 
 const ASSIGNEE_TYPES: IssuesScope[] = ["all", "members", "agents"];
+const PROJECT_HIDDEN_FIELDS: NegatableFilterDimension[] = ["project"];
 const MY_RELATIONS: Exclude<MyIssuesScope, "agents">[] = ["assigned", "created", "all"];
 const MY_SAVE_VARIANT: Record<MyIssuesScope, NonNullable<CreateIssueViewRequest["scope_variant"]>> = {
   all: "any",
@@ -272,8 +279,20 @@ export function IssueViewHeader({
     );
   }
 
-  const { chips: filterChips } = useFilterChips(dateFilter, setDateFilter);
-  const filterCount = filterChips.length + (scopeCounts ? 1 : 0);
+  // "My issues" is already a relation to me; a second one there is noise.
+  const showRelation = base.kind !== "my";
+  const { chips: allFilterChips } = useFilterChips(dateFilter, setDateFilter);
+  const filterChips = showRelation
+    ? allFilterChips
+    : allFilterChips.filter((chip) => chip.key !== "relation");
+  // In advanced mode the trigger names the mode and counts its conditions.
+  const advancedFilter = useViewStore((s) => s.advancedFilter);
+  const advancedMode = advancedFilter !== null;
+  const filterCount =
+    filterChips.filter((chip) => chip.key !== "advanced").length +
+    countAdvancedConditions(advancedFilter) +
+    (scopeCounts ? 1 : 0);
+  const filterLabel = advancedMode ? t(($) => $.filters.advanced_title) : t(($) => $.views.filter);
   // The trigger is an icon, so the tooltip is where the reader learns what
   // the count is made of without opening the menu.
   const filterFields = [
@@ -282,11 +301,15 @@ export function IssueViewHeader({
   ];
   const filterTooltip =
     filterFields.length > 0
-      ? `${t(($) => $.views.filter)} · ${filterFields.join(t(($) => $.workflows.list_separator))}`
-      : t(($) => $.views.filter);
+      ? `${filterLabel} · ${filterFields.join(t(($) => $.workflows.list_separator))}`
+      : filterLabel;
   // An idle surface has nothing to report, so the chip only takes room while
   // someone is working or its filter is on.
   const showAgentsChip = agentRunningFilter || (controller.workingAgents?.length ?? 0) > 0;
+  const modifiedKeys = useMemo(
+    () => (activeView && modified?.filters ? modifiedFilterDimensions(activeView, state) : undefined),
+    [activeView, modified?.filters, state],
+  );
 
   const title = (
     <>
@@ -420,12 +443,12 @@ export function IssueViewHeader({
                 filterCount > 0 && "text-foreground",
               )}
               aria-label={
-                filterCount > 0
+                filterCount > 0 && !advancedMode
                   ? t(($) => $.views.filter_count, { count: filterCount })
-                  : t(($) => $.views.filter)
+                  : filterLabel
               }
             >
-              <Filter className="size-4" />
+              {advancedMode ? <ListTree className="size-4" /> : <Filter className="size-4" />}
               {filterCount > 0 && (
                 <span className="rounded-sm bg-brand/10 px-1 text-caption font-medium tabular-nums text-brand">
                   {filterCount}
@@ -434,6 +457,10 @@ export function IssueViewHeader({
             </Button>
           }
           leadingSections={scopeSection}
+          showRelation={showRelation}
+          hiddenFields={base.kind === "project" ? PROJECT_HIDDEN_FIELDS : undefined}
+          modifiedKeys={modifiedKeys}
+          summaryTitle={activeView?.name ?? baseName}
           scopedIssues={controller.surfaceIssues}
           facetCountsExact={controller.facetCountsExact}
           tableFacetCounts={controller.tableFacetCounts}

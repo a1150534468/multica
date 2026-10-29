@@ -2,15 +2,17 @@
 
 import { useIssueStatuses } from "@multica/core/issue-statuses/hooks";
 import { useStatusLabel } from "../utils/status-label";
-import { NO_PROPERTY_VALUE } from "../utils/filter";
 import { useMemo, type ReactNode } from "react";
 import {
+  CalendarClock,
   CalendarDays,
   CircleDashed,
   CircleDot,
+  CircleUser,
   FolderKanban,
   SignalHigh,
   Tag,
+  ListTree,
   User,
   UserPen,
   X,
@@ -25,18 +27,25 @@ import { projectListOptions } from "@multica/core/projects/queries";
 import { PROJECT_STATUS_CONFIG } from "@multica/core/projects/config";
 import { labelListOptions } from "@multica/core/labels/queries";
 import { propertyListOptions } from "@multica/core/properties";
-import { isActorPropertyType, isListPropertyType, isScalarPropertyType, parseActorRef, propertyFilterValueKey, PROPERTY_FILTER_OP_SYMBOLS, type PropertyFilterValue } from "@multica/core/types";
+import { isActorPropertyType, parseActorRef, propertyFilterValueKey, type PropertyFilterValue } from "@multica/core/types";
 import {
   type ActorFilterValue,
   type FilterDimension,
   type FilterSnapshot,
   type IssueDateFilter,
+  type NegatableFilterDimension,
 } from "@multica/core/issues/stores/view-store";
 import {
   actorFilterKey,
   type IssueViewBaseline,
 } from "@multica/core/issue-views/baseline";
 import { useViewStore, useViewStoreApi } from "@multica/core/issues/stores/view-store-context";
+import {
+  advancedFilterSignature,
+  countAdvancedConditions,
+} from "@multica/core/issues/stores/filter-tree";
+import { DUE_DATE_LABEL_KEY, RELATION_LABEL_KEY } from "./filter-field-options";
+import { usePropertyValueName } from "./property-filter-options";
 import { StatusIcon } from "./status-icon";
 import { PriorityIcon } from "./priority-icon";
 import { ActorAvatar } from "../../common/actor-avatar";
@@ -53,10 +62,25 @@ export interface FilterChip {
   value: string;
   /** Up to three overlapping value icons rendered before the summary text. */
   valueIcons?: ReactNode;
+  /** The dimension excludes these values ("is not"). */
+  negated?: boolean;
   onRemove: () => void;
 }
 
-function summarize(names: (string | undefined)[]): string {
+/** The chip's relation word. "Is not" carries a fill so it never reads as
+ *  "is" at a glance; "is" stays quiet. */
+export function FilterOperator({ negated }: { negated?: boolean }) {
+  const { t } = useT("issues");
+  return negated ? (
+    <span className="shrink-0 rounded-sm bg-muted px-1 font-semibold text-foreground">
+      {t(($) => $.filters.operator_is_not)}
+    </span>
+  ) : (
+    <span className="shrink-0 text-muted-foreground">{t(($) => $.filters.operator_is)}</span>
+  );
+}
+
+export function summarize(names: (string | undefined)[]): string {
   const first = names.find((n): n is string => !!n);
   if (first === undefined) return String(names.length);
   const rest = names.length - 1;
@@ -64,6 +88,8 @@ function summarize(names: (string | undefined)[]): string {
 }
 
 const CHIP_ICON_CLASS = "size-3 shrink-0 text-muted-foreground";
+
+export { RELATION_LABEL_KEY };
 
 /** Overlapping value icons, following the runtime-list stack pattern: each
  *  icon sits on an opaque wrapper so the one underneath cannot show through. */
@@ -199,8 +225,13 @@ export function useFilterChips(
   const includeNoProject = useViewStore((s) => s.includeNoProject);
   const projectStatusFilters = useViewStore((s) => s.projectStatusFilters);
   const labelFilters = useViewStore((s) => s.labelFilters);
+  const relationFilters = useViewStore((s) => s.relationFilters);
+  const dueDateFilters = useViewStore((s) => s.dueDateFilters);
+  const advancedFilter = useViewStore((s) => s.advancedFilter);
+  const negatedFilters = useViewStore((s) => s.negatedFilters);
   const propertyFilters = useViewStore((s) => s.propertyFilters);
   const store = useViewStoreApi();
+  const negated = new Set(negatedFilters);
 
   const hasStoreFilters =
     statusFilters.length > 0 ||
@@ -212,6 +243,9 @@ export function useFilterChips(
     includeNoProject ||
     projectStatusFilters.length > 0 ||
     labelFilters.length > 0 ||
+    relationFilters.length > 0 ||
+    dueDateFilters.length > 0 ||
+    advancedFilter !== null ||
     Object.values(propertyFilters).some((selected) => selected.length > 0);
   const showDateChip = !!onDateFilterChange && !!dateFilter;
 
@@ -253,6 +287,7 @@ export function useFilterChips(
     () => buildChipActorNames(members, agents, squads),
     [members, agents, squads],
   );
+  const propertyValueName = usePropertyValueName(actorName);
 
   // Inside a saved view chips show only the user's additions ON TOP of the
   // view; removing one returns the dimension to the view's values (never
@@ -264,6 +299,7 @@ export function useFilterChips(
     }
     const s = store.getState();
     const raw = baseline.raw;
+    const otherNegations = s.negatedFilters.filter((d) => d !== dimension);
     const current: FilterSnapshot = {
       statusFilters: s.statusFilters,
       priorityFilters: s.priorityFilters,
@@ -274,7 +310,14 @@ export function useFilterChips(
       includeNoProject: s.includeNoProject,
       projectStatusFilters: s.projectStatusFilters,
       labelFilters: s.labelFilters,
+      relationFilters: s.relationFilters,
+      dueDateFilters: s.dueDateFilters,
+      // The dimension also returns to the view's own "is" / "is not".
+      negatedFilters: baseline.negated.has(dimension as NegatableFilterDimension)
+        ? [...otherNegations, dimension as NegatableFilterDimension]
+        : otherNegations,
       propertyFilters: s.propertyFilters,
+      advancedFilter: s.advancedFilter,
     };
     switch (dimension) {
       case "status":
@@ -309,6 +352,12 @@ export function useFilterChips(
       case "label":
         s.resetFiltersTo({ ...current, labelFilters: raw.labelFilters });
         break;
+      case "relation":
+        s.resetFiltersTo({ ...current, relationFilters: raw.relationFilters });
+        break;
+      case "dueDate":
+        s.resetFiltersTo({ ...current, dueDateFilters: raw.dueDateFilters });
+        break;
       default: {
         const propertyId = dimension.slice("property:".length);
         const propertyFilters = { ...current.propertyFilters };
@@ -320,38 +369,40 @@ export function useFilterChips(
     }
   };
 
-  // Values the view already fixes are invisible here — subtract them.
-  const deltaStatus = baseline
-    ? statusFilters.filter((s) => !baseline.status.has(s))
-    : statusFilters;
-  const deltaPriority = baseline
-    ? priorityFilters.filter((p) => !baseline.priority.has(p))
-    : priorityFilters;
-  const deltaAssignees = baseline
-    ? assigneeFilters.filter((a) => !baseline.assignee.has(actorFilterKey(a)))
-    : assigneeFilters;
-  const deltaNoAssignee = baseline
-    ? includeNoAssignee && !baseline.includeNoAssignee
-    : includeNoAssignee;
-  const deltaCreators = baseline
-    ? creatorFilters.filter((a) => !baseline.creator.has(actorFilterKey(a)))
-    : creatorFilters;
-  const deltaProjects = baseline
-    ? projectFilters.filter((id) => !baseline.project.has(id))
-    : projectFilters;
-  const deltaNoProject = baseline
-    ? includeNoProject && !baseline.includeNoProject
-    : includeNoProject;
-  const deltaProjectStatuses = (
-    baseline
-      ? projectStatusFilters.filter((s) => !baseline.projectStatus.has(s))
-      : projectStatusFilters
+  // Values the view already fixes are invisible here — subtract them. A
+  // dimension whose "is" / "is not" differs from the view's is a new
+  // condition as a whole, so nothing is subtracted from it.
+  const fixedFor = (dimension: NegatableFilterDimension, fixed: Set<string> | undefined) =>
+    baseline && baseline.negated.has(dimension) === negated.has(dimension) ? fixed : undefined;
+  const without = <T,>(values: T[], fixed: Set<string> | undefined, key: (v: T) => string) =>
+    fixed ? values.filter((v) => !fixed.has(key(v))) : values;
+  const same = (v: string) => v;
+  const deltaStatus = without(statusFilters, fixedFor("status", baseline?.status), same);
+  const deltaPriority = without(priorityFilters, fixedFor("priority", baseline?.priority), same);
+  const assigneeFixed = fixedFor("assignee", baseline?.assignee);
+  const deltaAssignees = without(assigneeFilters, assigneeFixed, actorFilterKey);
+  const deltaNoAssignee =
+    includeNoAssignee && !(assigneeFixed && baseline?.includeNoAssignee);
+  const deltaCreators = without(creatorFilters, fixedFor("creator", baseline?.creator), actorFilterKey);
+  const projectFixed = fixedFor("project", baseline?.project);
+  const deltaProjects = without(projectFilters, projectFixed, same);
+  const deltaNoProject = includeNoProject && !(projectFixed && baseline?.includeNoProject);
+  const deltaProjectStatuses = without(
+    projectStatusFilters,
+    fixedFor("projectStatus", baseline?.projectStatus),
+    same,
     // The store sanitizes on rehydrate; this keeps a member the config does
     // not know from throwing on `.dotColor` if one ever gets past that.
   ).filter((status) => PROJECT_STATUS_CONFIG[status] !== undefined);
-  const deltaLabels = baseline
-    ? labelFilters.filter((id) => !baseline.label.has(id))
-    : labelFilters;
+  const deltaLabels = without(labelFilters, fixedFor("label", baseline?.label), same);
+  const deltaRelations = without(relationFilters, fixedFor("relation", baseline?.relation), same);
+  const deltaDueDates = without(dueDateFilters, fixedFor("dueDate", baseline?.dueDate), same);
+  // The tree is one condition as a whole: it shows unless it is exactly the
+  // view's own.
+  const advancedConditions = countAdvancedConditions(advancedFilter);
+  const showAdvancedChip =
+    advancedFilter !== null &&
+    (!baseline || advancedFilterSignature(advancedFilter) !== advancedFilterSignature(baseline.raw.advancedFilter));
   const deltaProperties: Record<string, PropertyFilterValue[]> = {};
   for (const [id, selected] of Object.entries(propertyFilters)) {
     const fixed = baseline?.property.get(id);
@@ -387,6 +438,7 @@ export function useFilterChips(
         onlyStatus !== undefined && deltaStatus.length === 1
           ? resolveStatusLabel(onlyStatus)
           : t(($) => $.filters.chip_status_count, { count: deltaStatus.length }),
+      negated: negated.has("status"),
       onRemove: () => clearDimension("status"),
     });
   }
@@ -407,6 +459,7 @@ export function useFilterChips(
         onlyPriority !== undefined && deltaPriority.length === 1
           ? t(($) => $.priority[onlyPriority])
           : t(($) => $.filters.chip_priority_count, { count: deltaPriority.length }),
+      negated: negated.has("priority"),
       onRemove: () => clearDimension("priority"),
     });
   }
@@ -419,6 +472,7 @@ export function useFilterChips(
       label: t(($) => $.filters.section_assignee),
       valueIcons: deltaAssignees.length > 0 ? <AvatarStack actors={deltaAssignees} /> : undefined,
       value: summarize(names),
+      negated: negated.has("assignee"),
       onRemove: () => clearDimension("assignee"),
     });
   }
@@ -429,6 +483,7 @@ export function useFilterChips(
       label: t(($) => $.filters.section_creator),
       valueIcons: <AvatarStack actors={deltaCreators} />,
       value: summarize(deltaCreators.map(actorName)),
+      negated: negated.has("creator"),
       onRemove: () => clearDimension("creator"),
     });
   }
@@ -452,6 +507,7 @@ export function useFilterChips(
           </IconStack>
         ) : undefined,
       value: summarize(names),
+      negated: negated.has("project"),
       onRemove: () => clearDimension("project"),
     });
   }
@@ -475,6 +531,7 @@ export function useFilterChips(
       value: summarize(
         deltaProjectStatuses.map((status) => projectStatusLabels[status]),
       ),
+      negated: negated.has("projectStatus"),
       onRemove: () => clearDimension("projectStatus"),
     });
   }
@@ -492,7 +549,41 @@ export function useFilterChips(
         />
       ),
       value: summarize(deltaLabels.map((id) => labelById.get(id)?.name)),
+      negated: negated.has("label"),
       onRemove: () => clearDimension("label"),
+    });
+  }
+  if (deltaRelations.length > 0) {
+    chips.push({
+      key: "relation",
+      icon: <CircleUser className={CHIP_ICON_CLASS} />,
+      label: t(($) => $.filters.section_relation),
+      value: summarize(deltaRelations.map((relation) => t(($) => $.filters[RELATION_LABEL_KEY[relation]]))),
+      negated: negated.has("relation"),
+      onRemove: () => clearDimension("relation"),
+    });
+  }
+  if (deltaDueDates.length > 0) {
+    chips.push({
+      key: "dueDate",
+      icon: <CalendarClock className={CHIP_ICON_CLASS} />,
+      label: t(($) => $.filters.section_due_date),
+      value: summarize(deltaDueDates.map((bucket) => t(($) => $.filters[DUE_DATE_LABEL_KEY[bucket]]))),
+      negated: negated.has("dueDate"),
+      onRemove: () => clearDimension("dueDate"),
+    });
+  }
+  if (showAdvancedChip) {
+    chips.push({
+      key: "advanced",
+      icon: <ListTree className={CHIP_ICON_CLASS} />,
+      label: t(($) => $.filters.advanced_title),
+      value: t(($) => $.filters.advanced_conditions, { count: advancedConditions }),
+      onRemove: () => {
+        const s = store.getState();
+        if (baseline) s.resetFiltersTo(baseline.raw);
+        else s.setAdvancedFilter(null);
+      },
     });
   }
   for (const [propertyId, selected] of Object.entries(deltaProperties)) {
@@ -505,41 +596,9 @@ export function useFilterChips(
     // references, so names come from the directory and the icons are avatars.
     const actorProperty = isActorPropertyType(definition.type);
     const actorValues = actorProperty ? actorFilterValues(selected) : [];
-    const optionName = (member: PropertyFilterValue): string | undefined => {
-      if (member === NO_PROPERTY_VALUE) {
-        return t(($) => $.pickers.custom_property.none);
-      }
-      // Scalar operator members summarize with their operator; the comparison
-      // symbols are locale-independent, the word ops get chip phrases.
-      if (typeof member === "object") {
-        if (member.op === "contains") {
-          return t(($) => $.filters.chip_op_contains, { value: member.value });
-        }
-        if (member.op === "before") {
-          return t(($) => $.filters.chip_op_before, { value: member.value });
-        }
-        if (member.op === "after") {
-          return t(($) => $.filters.chip_op_after, { value: member.value });
-        }
-        const symbol = PROPERTY_FILTER_OP_SYMBOLS[member.op] ?? member.op;
-        return `${symbol} ${member.value}`;
-      }
-      if (actorProperty) {
-        const ref = parseActorRef(member);
-        return ref ? actorName({ type: ref.kind, id: ref.id }) : undefined;
-      }
-      if (definition.type === "checkbox") {
-        return member === "true"
-          ? t(($) => $.pickers.custom_property.true_label)
-          : t(($) => $.pickers.custom_property.false_label);
-      }
-      // Scalar and list properties have no option list — the filter value IS
-      // the label (for lists it is one matched element).
-      if (isScalarPropertyType(definition.type) || isListPropertyType(definition.type)) {
-        return member;
-      }
-      return definition.config.options?.find((o) => o.id === member)?.name;
-    };
+    const optionName = (member: PropertyFilterValue) =>
+      propertyValueName(definition, member);
+
     const optionColors =
       definition.type === "checkbox" || actorProperty
         ? []
@@ -608,6 +667,7 @@ export function ChipSpan({ chip, className }: { chip: FilterChip; className?: st
         <span>{chip.label}</span>
       </span>
       <span className="flex min-w-0 items-center gap-1">
+        {chip.negated && <FilterOperator negated />}
         {chip.valueIcons}
         <span className="truncate font-medium">{chip.value}</span>
       </span>

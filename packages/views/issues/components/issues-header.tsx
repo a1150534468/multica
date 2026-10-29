@@ -2,16 +2,21 @@
 
 import { cloneElement, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Bot,
+  CalendarClock,
   CalendarDays,
   ChartGantt,
   ChevronDown,
   CircleDashed,
   CircleDot,
+  CircleUser,
   Columns3,
   Filter,
   FolderKanban,
   FolderMinus,
   List,
+  ListTree,
+  Search,
   SignalHigh,
   SlidersHorizontal,
   Tag,
@@ -24,7 +29,6 @@ import {
 import { Button } from "@multica/ui/components/ui/button";
 import { cn } from "@multica/ui/lib/utils";
 import { Spinner } from "@multica/ui/components/ui/spinner";
-import { Input } from "@multica/ui/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -60,7 +64,12 @@ import {
   PRIORITY_DISPLAY_ORDER,
 } from "@multica/core/issues/config";
 import { StatusIcon, PriorityIcon } from ".";
-import { useFilterChips, type FilterChip } from "./filter-chips-bar";
+import {
+  FilterOperator,
+  RELATION_LABEL_KEY,
+  useFilterChips,
+  type FilterChip,
+} from "./filter-chips-bar";
 import { useQuery } from "@tanstack/react-query";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { memberListOptions, agentListOptions, squadListOptions } from "@multica/core/workspace/queries";
@@ -71,12 +80,11 @@ import { propertyListOptions } from "@multica/core/properties";
 import { propertyIdFromViewKey } from "@multica/core/issues/stores/view-store";
 import type {
   Issue,
-  IssueProperty,
   IssueTableFacetSpec,
   IssueTableFacetsResponse,
   ProjectStatus,
 } from "@multica/core/types";
-import { formatActorRef, isActorPropertyType, isFilterablePropertyType, isListPropertyType, isScalarPropertyType, propertyFilterValueKey, PROPERTY_FILTER_OP_SYMBOLS, PROPERTY_FILTER_OPS_BY_TYPE, type PropertyFilterOp, type PropertyFilterValue } from "@multica/core/types";
+import { isFilterablePropertyType, propertyFilterValueKey, type PropertyFilterValue } from "@multica/core/types";
 import { ProjectIcon } from "../../projects/components/project-icon";
 import { useProjectStatusLabels } from "../../projects/components/labels";
 import { ActorAvatar } from "../../common/actor-avatar";
@@ -90,9 +98,12 @@ import {
   CARD_PROPERTY_OPTIONS,
   cardPropertyOptionsForView,
   sortOptionsForView,
+  ISSUE_RELATION_FILTERS,
   type ActorFilterValue,
   type IssueDateField,
   type IssueDateFilter,
+  type IssueRelationFilter,
+  type NegatableFilterDimension,
   type SortField,
   type IssueGrouping,
   type SwimlaneGrouping,
@@ -100,18 +111,34 @@ import {
   type ViewMode,
 } from "@multica/core/issues/stores/view-store";
 import { useViewStore, useViewStoreApi } from "@multica/core/issues/stores/view-store-context";
-import { useAuthStore } from "@multica/core/auth";
+import {
+  advancedFilterSignature,
+  countAdvancedConditions,
+  DUE_DATE_FILTERS,
+  NEGATABLE_FILTER_DIMENSIONS,
+  simpleFieldValues,
+  type AdvancedFilterGroup,
+} from "@multica/core/issues/stores/filter-tree";
 import { actorFilterKey, type IssueViewBaseline } from "@multica/core/issue-views/baseline";
 import { addDaysDateOnly, dateOnlyToLocalDate, formatDateOnly, toDateOnly, todayDateOnly } from "@multica/core/issues/date";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@multica/ui/components/ui/tooltip";
 import { useT } from "../../i18n";
 import { useStatusOptions } from "../utils/status-options";
 import { useColumnStatuses } from "../surface/column-statuses-context";
-import { NO_PROPERTY_VALUE } from "../utils/filter";
 import { matchesPinyin } from "../../editor/extensions/pinyin-match";
 import { FILTER_ITEM_CLASS, HoverCheck } from "../../common/hover-check";
 import { TableColumnPicker } from "./table-view";
 import { DisplayChip, SortDirectionButton } from "./display-parts";
+import { AdvancedFilterPanel, stopMenuSearchKeys } from "./advanced-filter-panel";
+import { PropertyFilterOptions } from "./property-filter-options";
+import {
+  DUE_DATE_LABEL_KEY,
+  FILTER_FIELD_ICONS,
+  matchesFilterQuery,
+  toggleSimpleFilterValue,
+  useFilterFieldLabels,
+  useFilterValueCatalog,
+} from "./filter-field-options";
 
 type LocalDateRange = {
   from: Date | undefined;
@@ -131,7 +158,11 @@ function getActiveFilterCount(
     includeNoProject: boolean;
     projectStatusFilters: ProjectStatus[];
     labelFilters: string[];
+    relationFilters: string[];
+    dueDateFilters: string[];
+    negatedFilters: NegatableFilterDimension[];
     propertyFilters?: Record<string, PropertyFilterValue[]>;
+    advancedFilter?: AdvancedFilterGroup | null;
     dateFilter?: IssueDateFilter | null;
   },
   // Inside a saved view only the user's additions on top of the view's own
@@ -139,21 +170,36 @@ function getActiveFilterCount(
   baseline?: IssueViewBaseline,
 ) {
   let count = 0;
+  const negated = new Set(state.negatedFilters);
+  // Flipping a view's own "is" to "is not" makes the whole dimension new.
+  const fixedFor = (dimension: NegatableFilterDimension, fixed?: Set<string>) =>
+    baseline && baseline.negated.has(dimension) === negated.has(dimension) ? fixed : undefined;
   const delta = (values: string[], fixed?: Set<string>) =>
     fixed ? values.filter((v) => !fixed.has(v)).length : values.length;
-  if (delta(state.statusFilters, baseline?.status) > 0) count++;
-  if (delta(state.priorityFilters, baseline?.priority) > 0) count++;
+  if (delta(state.statusFilters, fixedFor("status", baseline?.status)) > 0) count++;
+  if (delta(state.priorityFilters, fixedFor("priority", baseline?.priority)) > 0) count++;
+  const assigneeFixed = fixedFor("assignee", baseline?.assignee);
   const assigneeDelta =
-    delta(state.assigneeFilters.map(actorFilterKey), baseline?.assignee) > 0 ||
-    (state.includeNoAssignee && !(baseline?.includeNoAssignee ?? false));
+    delta(state.assigneeFilters.map(actorFilterKey), assigneeFixed) > 0 ||
+    (state.includeNoAssignee && !(assigneeFixed && baseline?.includeNoAssignee));
   if (assigneeDelta) count++;
-  if (delta(state.creatorFilters.map(actorFilterKey), baseline?.creator) > 0) count++;
+  if (delta(state.creatorFilters.map(actorFilterKey), fixedFor("creator", baseline?.creator)) > 0) count++;
+  const projectFixed = fixedFor("project", baseline?.project);
   const projectDelta =
-    delta(state.projectFilters, baseline?.project) > 0 ||
-    (state.includeNoProject && !(baseline?.includeNoProject ?? false));
+    delta(state.projectFilters, projectFixed) > 0 ||
+    (state.includeNoProject && !(projectFixed && baseline?.includeNoProject));
   if (projectDelta) count++;
-  if (delta(state.projectStatusFilters, baseline?.projectStatus) > 0) count++;
-  if (delta(state.labelFilters, baseline?.label) > 0) count++;
+  if (delta(state.projectStatusFilters, fixedFor("projectStatus", baseline?.projectStatus)) > 0) count++;
+  if (delta(state.labelFilters, fixedFor("label", baseline?.label)) > 0) count++;
+  if (delta(state.relationFilters, fixedFor("relation", baseline?.relation)) > 0) count++;
+  if (delta(state.dueDateFilters, fixedFor("dueDate", baseline?.dueDate)) > 0) count++;
+  const advancedFilter = state.advancedFilter ?? null;
+  if (
+    !baseline ||
+    advancedFilterSignature(advancedFilter) !== advancedFilterSignature(baseline.raw.advancedFilter)
+  ) {
+    count += countAdvancedConditions(advancedFilter);
+  }
   for (const [id, selected] of Object.entries(state.propertyFilters ?? {})) {
     // Property members can be operator objects — compare through their
     // canonical keys so a view-fixed operator still cancels out.
@@ -681,334 +727,6 @@ function LabelSubContent({
   );
 }
 
-/**
- * Option checkboxes for one custom property inside the Filter dropdown.
- * Select/multi_select list the definition's options (dot + name); checkbox
- * definitions expose the "true"/"false" pseudo-options with Yes/No labels;
- * actor definitions have no config options at all, so their candidates come
- * from the member directory instead, with the signed-in member first so
- * "this property is me" stays one click away.
- */
-
-// Keyboard guard for the inline operator radios — same contract as the
-// scalar input below: Escape/Tab belong to the menu (close / move focus);
-// every other navigation or selection key must not bubble into the popup's
-// typeahead / list-navigation handlers.
-function stopScalarMenuKeys(event: React.KeyboardEvent) {
-  if (event.key === "Escape" || event.key === "Tab") return;
-  event.stopPropagation();
-}
-function PropertyFilterOptions({
-  property,
-  counts,
-  selected,
-  onToggle,
-  onSetValues,
-  fixedIds,
-  fixedTitle,
-}: {
-  property: IssueProperty;
-  counts: Map<string, number> | undefined;
-  selected: PropertyFilterValue[];
-  onToggle: (optionId: string) => void;
-  /** Replace the property's full filter value set (scalar types only). */
-  onSetValues: (optionIds: PropertyFilterValue[]) => void;
-  fixedIds?: Set<string>;
-  fixedTitle?: string;
-}) {
-  const { t } = useT("issues");
-  const wsId = useWorkspaceId();
-  const currentUserId = useAuthStore((s) => s.user?.id);
-  const actorProperty = isActorPropertyType(property.type);
-  // Scalar properties (text / number / date / url) have no option list — the
-  // filter menu shows a value input plus "No value".
-  const { data: actorMembers = [] } = useQuery({
-    ...memberListOptions(wsId),
-    enabled: actorProperty,
-  });
-
-  const actorOptions = useMemo(() => {
-    if (!actorProperty) return [];
-    return actorMembers
-      .slice()
-      .sort((a, b) => {
-        if (a.user_id === currentUserId) return -1;
-        if (b.user_id === currentUserId) return 1;
-        return 0;
-      })
-      .map((m) => ({
-        id: formatActorRef("member", m.user_id),
-        name: m.name,
-        actorType: "member" as const,
-        actorId: m.user_id,
-      }));
-  }, [actorProperty, actorMembers, currentUserId]);
-
-  // "No value" is offered for every property type: it selects issues where the
-  // property is unset, the inverse of picking one of the options below.
-  const noValueOption = {
-    id: NO_PROPERTY_VALUE,
-    name: t(($) => $.pickers.custom_property.none),
-    color: undefined as string | undefined,
-    actorType: undefined as string | undefined,
-    actorId: undefined as string | undefined,
-  };
-  // Scalar value state lives at the top level so the hooks stay unconditional
-  // (Rules of Hooks): it is only rendered for text / number / date / url and
-  // the list types (equality-only input), but must be declared regardless of
-  // which branch runs. The draft syncs to the committed scalar member whenever
-  // that changes, so a filter cleared or rewritten elsewhere cannot be written
-  // back from a stale input.
-  const committedMember = selected.find((member) => member !== NO_PROPERTY_VALUE);
-  const committedScalar =
-    typeof committedMember === "object" ? committedMember.value : (committedMember ?? "");
-  const committedOp: PropertyFilterOp | "is" =
-    typeof committedMember === "object" ? committedMember.op : "is";
-  const hasNoValue = selected.includes(NO_PROPERTY_VALUE);
-  const [draft, setDraft] = useState(committedScalar);
-  useEffect(() => setDraft(committedScalar), [committedScalar]);
-  // Operator picked in the open menu but not yet committed; null defers to the
-  // committed member (equality when there is none). Resets whenever the
-  // committed member changes — including right after this menu commits — so a
-  // value rewritten elsewhere can't inherit a stale operator.
-  const [pendingOp, setPendingOp] = useState<PropertyFilterOp | "is" | null>(null);
-  const committedKey =
-    committedMember === undefined
-      ? ""
-      : typeof committedMember === "object"
-        ? `op:${committedMember.op}:${committedMember.value}`
-        : `eq:${committedMember}`;
-  useEffect(() => setPendingOp(null), [committedKey]);
-  const options = [
-    ...(actorProperty
-      ? actorOptions.map((option) => ({
-          id: option.id,
-          name: option.name,
-          color: undefined as string | undefined,
-          actorType: option.actorType as string | undefined,
-          actorId: option.actorId as string | undefined,
-        }))
-      : property.type === "checkbox"
-        ? [
-            { id: "true", name: t(($) => $.pickers.custom_property.true_label), color: undefined, actorType: undefined, actorId: undefined },
-            { id: "false", name: t(($) => $.pickers.custom_property.false_label), color: undefined, actorType: undefined, actorId: undefined },
-          ]
-        : (property.config.options ?? []).map((option) => ({
-            id: option.id,
-            name: option.name,
-            color: option.color as string | undefined,
-            actorType: undefined as string | undefined,
-            actorId: undefined as string | undefined,
-          }))),
-    noValueOption,
-  ];
-
-  if (isScalarPropertyType(property.type) || isListPropertyType(property.type)) {
-    const placeholder =
-      property.type === "url" || property.type === "multi_url"
-        ? t(($) => $.pickers.custom_property.url_placeholder)
-        : property.type === "number"
-          ? t(($) => $.pickers.custom_property.number_placeholder)
-          : t(($) => $.pickers.custom_property.value_placeholder);
-    const noneCount = counts?.get(NO_PROPERTY_VALUE) ?? 0;
-    // A saved view locks this dimension: the value (with its operator) AND
-    // "No value" are both part of the view's identity, so neither can be
-    // edited in place.
-    const locked = fixedIds !== undefined && fixedIds.size > 0;
-    // "is" is equality and commits a bare string — the pre-operator shape.
-    // Every other op commits an operator object; the server and matcher both
-    // treat unknown shapes conservatively.
-    const effectiveOp: PropertyFilterOp | "is" = pendingOp ?? committedOp;
-    const scalarOperatorLabel = (op: PropertyFilterOp): string => {
-      if (op === "contains") return t(($) => $.pickers.custom_property.op_contains);
-      if (op === "before") return t(($) => $.pickers.custom_property.op_before);
-      if (op === "after") return t(($) => $.pickers.custom_property.op_after);
-      return PROPERTY_FILTER_OP_SYMBOLS[op] ?? op;
-    };
-    // List types are equality-only: their PROPERTY_FILTER_OPS_BY_TYPE entry is
-    // empty by design, and looking it up needs the scalar narrowing anyway
-    // (IssueProperty.type is a lenient string).
-    const scalarOps = isScalarPropertyType(property.type)
-      ? (PROPERTY_FILTER_OPS_BY_TYPE[property.type] ?? [])
-      : [];
-    const opButtons: { op: PropertyFilterOp | "is"; label: string }[] = [
-      {
-        op: "is",
-        label:
-          property.type === "number"
-            ? "="
-            : t(($) => $.pickers.custom_property.op_is),
-      },
-      ...scalarOps.map((op) => ({
-        op,
-        label: scalarOperatorLabel(op),
-      })),
-    ];
-    const commitValue = (raw: string, op: PropertyFilterOp | "is" = effectiveOp) => {
-      const value = raw.trim();
-      // NO_PROPERTY_VALUE is the reserved "no value" sentinel — it cannot be
-      // filtered as a literal value. The value and "No value" compose like
-      // every other property type: committing a value replaces only the value
-      // member and preserves "No value" membership.
-      if (value === NO_PROPERTY_VALUE) return;
-      const member: PropertyFilterValue | undefined = value
-        ? op === "is"
-          ? value
-          : { op, value }
-        : undefined;
-      onSetValues([
-        ...(member ? [member] : []),
-        ...(hasNoValue ? [NO_PROPERTY_VALUE] : []),
-      ]);
-    };
-    const applyOp = (op: PropertyFilterOp | "is") => {
-      // An explicit click commits the current draft with the chosen op, unlike
-      // the input which waits for Enter/blur. With an empty draft nothing
-      // commits, so the choice rides on pendingOp and the next Enter/blur
-      // commit carries it — killing pendingOp here would silently downgrade
-      // that later commit back to equality.
-      setPendingOp(op);
-      commitValue(draft, op);
-    };
-    return (
-      <>
-        {opButtons.length > 1 && (
-          <div
-            role="radiogroup"
-            aria-label={t(($) => $.pickers.custom_property.operator_label)}
-            className="flex flex-wrap gap-1 px-2 pt-1.5"
-          >
-            {opButtons.map(({ op, label }) => {
-              const active = effectiveOp === op;
-              return (
-                <label
-                  key={op}
-                  className={locked ? "cursor-not-allowed" : "cursor-pointer"}
-                >
-                  <input
-                    type="radio"
-                    name={`property-filter-op-${property.id}`}
-                    value={op}
-                    checked={active}
-                    disabled={locked}
-                    onChange={() => applyOp(op)}
-                    onKeyDown={stopScalarMenuKeys}
-                    className="peer sr-only"
-                  />
-                  <span
-                    className={`inline-flex h-6 items-center rounded-md px-1.5 text-caption transition-colors peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-ring ${
-                      active
-                        ? "bg-accent font-medium text-foreground"
-                        : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-                    }`}
-                  >
-                    {label}
-                  </span>
-                </label>
-              );
-            })}
-          </div>
-        )}
-        <div className="px-2 py-1.5">
-          <Input
-            type={property.type === "number" ? "number" : property.type === "date" ? "date" : "text"}
-            step={property.type === "number" ? "any" : undefined}
-            inputMode={property.type === "number" ? "decimal" : undefined}
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onBlur={(event) => {
-              // Clicking the "No value" menu item moves focus off the input,
-              // firing blur first. That premature commit would flip the
-              // checkbox's controlled state before its click handler reads it
-              // — so when focus moves into a menu item in this popup, skip the
-              // blur commit and let onCheckedChange decide from the pre-blur
-              // state.
-              const next = event.relatedTarget;
-              const movedToMenuItem =
-                next instanceof HTMLElement &&
-                next.closest('[role="menuitemcheckbox"]') !== null;
-              if (!movedToMenuItem) commitValue(draft);
-            }}
-            onKeyDown={(event) => {
-              // Base UI's menu popup merges typeahead + list-navigation handlers
-              // onto the role="menu" element and stopEvent()s every printable
-              // key — without stopping propagation, the input would swallow no
-              // characters at all (and arrow keys on number/date inputs would
-              // be hijacked). Escape/Tab are left for the menu to close/move
-              // focus; Enter commits and still needs stopPropagation so it does
-              // not bubble up and activate the highlighted "No value" item.
-              if (event.key === "Escape" || event.key === "Tab") return;
-              if (event.key === "Enter") commitValue(draft);
-              event.stopPropagation();
-            }}
-            disabled={locked}
-            placeholder={placeholder}
-            className="h-8"
-          />
-        </div>
-        <DropdownMenuCheckboxItem
-          checked={hasNoValue}
-          disabled={locked}
-          onCheckedChange={(checked) => {
-            // "No value" toggles membership in the same OR-set as the value —
-            // checking/unchecking never touches the committed value member, so
-            // unchecking restores it without any draft round-trip.
-            const valueMembers = selected.filter((id) => id !== NO_PROPERTY_VALUE);
-            onSetValues(
-              checked
-                ? [...valueMembers, NO_PROPERTY_VALUE]
-                : valueMembers,
-            );
-          }}
-          className={FILTER_ITEM_CLASS}
-        >
-          <HoverCheck checked={hasNoValue} />
-          <span className="truncate">{noValueOption.name}</span>
-          {noneCount > 0 && (
-            <span className="ml-auto text-caption text-muted-foreground">{noneCount}</span>
-          )}
-        </DropdownMenuCheckboxItem>
-      </>
-    );
-  }
-
-  return (
-    <>
-      {options.map((option) => {
-        const checked = selected.includes(option.id);
-        const count = counts?.get(option.id) ?? 0;
-        return (
-          <DropdownMenuCheckboxItem
-            key={option.id}
-            checked={checked}
-            disabled={fixedIds?.has(option.id) === true}
-            title={fixedIds?.has(option.id) === true ? fixedTitle : undefined}
-            onCheckedChange={() => onToggle(option.id)}
-            className={FILTER_ITEM_CLASS}
-          >
-            <HoverCheck checked={checked} />
-            {option.actorType && option.actorId && (
-              <ActorAvatar actorType={option.actorType} actorId={option.actorId} size="sm" />
-            )}
-            {option.color && (
-              <span
-                className="size-2.5 shrink-0 rounded-full"
-                style={{ backgroundColor: option.color }}
-              />
-            )}
-            <span className="truncate">{option.name}</span>
-            {count > 0 && (
-              <span className="ml-auto text-caption text-muted-foreground">
-                {count}
-              </span>
-            )}
-          </DropdownMenuCheckboxItem>
-        );
-      })}
-    </>
-  );
-}
-
 // Date sub-menu content
 
 function DateSubContent({
@@ -1156,11 +874,101 @@ export function ViewRefreshIndicator({ active }: { active: boolean }) {
   );
 }
 
-/** What a dimension is filtering on, in its row of the filter menu. */
-function FilterTriggerValue({ chip }: { chip: FilterChip | undefined }) {
+/** What a dimension is filtering on, in its row of the filter menu: the
+ *  relation word, the values, and a dot when it differs from the saved view. */
+function FilterTriggerValue({
+  chip,
+  modified = false,
+}: {
+  chip: FilterChip | undefined;
+  modified?: boolean;
+}) {
   if (!chip) return null;
   return (
-    <span className="ml-3 max-w-40 truncate text-caption font-medium text-primary">{chip.value}</span>
+    <span className="ml-3 flex min-w-0 items-center gap-1 text-caption">
+      <FilterOperator negated={chip.negated} />
+      <span className="max-w-40 truncate font-medium text-primary">{chip.value}</span>
+      {modified && <ModifiedDot />}
+    </span>
+  );
+}
+
+function ModifiedDot() {
+  const { t } = useT("issues");
+  const label = t(($) => $.filters.modified_hint);
+  return <span role="img" aria-label={label} title={label} className="size-1.5 shrink-0 rounded-full bg-brand" />;
+}
+
+const OPERATOR_SEGMENT_CLASS =
+  "h-6 flex-1 justify-center rounded-md px-3 py-0 text-caption text-muted-foreground focus:bg-background/60 data-checked:bg-background data-checked:font-medium data-checked:text-foreground data-checked:shadow-xs [&>[data-slot=dropdown-menu-radio-item-indicator]]:hidden";
+
+/** "Is" / "is not" for one dimension, heading its submenu. Radio items keep
+ *  it in the menu's keyboard order; the selection below is left as it is. */
+function FilterOperatorSwitch({ dimension }: { dimension: NegatableFilterDimension }) {
+  const { t } = useT("issues");
+  const negated = useViewStore((s) => s.negatedFilters.includes(dimension));
+  const setFilterNegated = useViewStore((s) => s.setFilterNegated);
+  return (
+    <>
+      <DropdownMenuRadioGroup
+        aria-label={t(($) => $.filters.operator_label)}
+        value={negated ? "is_not" : "is"}
+        onValueChange={(value) => setFilterNegated(dimension, value === "is_not")}
+        className="m-1 flex gap-0.5 rounded-lg bg-muted p-0.5"
+      >
+        <DropdownMenuRadioItem value="is" closeOnClick={false} className={OPERATOR_SEGMENT_CLASS}>
+          {t(($) => $.filters.operator_is)}
+        </DropdownMenuRadioItem>
+        <DropdownMenuRadioItem value="is_not" closeOnClick={false} className={OPERATOR_SEGMENT_CLASS}>
+          {t(($) => $.filters.operator_is_not)}
+        </DropdownMenuRadioItem>
+      </DropdownMenuRadioGroup>
+      <DropdownMenuSeparator />
+    </>
+  );
+}
+
+const RELATION_ICONS: Record<IssueRelationFilter, typeof User> = {
+  assigned: CircleUser,
+  created: UserPen,
+  my_agents: Bot,
+};
+
+/** Read-only sentence form of the active filters, shown on hover so a closed
+ *  menu still says what the surface is narrowed to. */
+function FilterSummary({
+  title,
+  chips,
+  modifiedKeys,
+}: {
+  title: string;
+  chips: FilterChip[];
+  modifiedKeys?: ReadonlySet<string>;
+}) {
+  const { t } = useT("issues");
+  const modifiedCount = chips.filter((chip) => modifiedKeys?.has(chip.key)).length;
+  return (
+    <div className="flex w-72 flex-col gap-1 py-1">
+      <div className="mb-1 flex items-center gap-1.5 font-medium">
+        <Filter className="size-3.5" />
+        <span className="truncate">{title}</span>
+      </div>
+      {chips.map((chip) => (
+        <div key={chip.key} className="flex min-w-0 items-center gap-1.5">
+          {chip.icon}
+          <span className="shrink-0 text-muted-foreground">{chip.label}</span>
+          <FilterOperator negated={chip.negated} />
+          <span className="min-w-0 truncate">{chip.value}</span>
+          {modifiedKeys?.has(chip.key) && <ModifiedDot />}
+        </div>
+      ))}
+      {modifiedCount > 0 && (
+        <div className="mt-1 flex items-center gap-1.5 border-t border-border pt-1.5 text-muted-foreground">
+          <ModifiedDot />
+          {t(($) => $.filters.unsaved_changes, { count: modifiedCount })}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1183,12 +991,25 @@ export function IssueFilterMenu({
   viewBaseline,
   leadingSections,
   align = "end",
+  showRelation = true,
+  hiddenFields,
+  modifiedKeys,
+  summaryTitle,
 }: {
   trigger: React.ReactElement;
   align?: "start" | "end";
   /** Rendered above the filter dimensions, e.g. the surface's scope axis. */
   leadingSections?: React.ReactNode;
   tooltip?: string;
+  /** Offer "relation to me". A surface already scoped to me hides it. */
+  showRelation?: boolean;
+  /** Fields the scope already fixes, left out of search and advanced mode. */
+  hiddenFields?: readonly NegatableFilterDimension[];
+  /** Chip keys whose condition differs from the open saved view. */
+  modifiedKeys?: ReadonlySet<string>;
+  /** With active filters, hovering the trigger shows them as sentences under
+   *  this title instead of `tooltip`. */
+  summaryTitle?: string;
   scopedIssues?: Issue[];
   facetCountsExact?: boolean;
   tableFacetCounts?: IssueTableFacetsResponse;
@@ -1217,9 +1038,27 @@ export function IssueFilterMenu({
   const includeNoProject = useViewStore((s) => s.includeNoProject);
   const projectStatusFilters = useViewStore((s) => s.projectStatusFilters);
   const labelFilters = useViewStore((s) => s.labelFilters);
+  const relationFilters = useViewStore((s) => s.relationFilters);
+  const dueDateFilters = useViewStore((s) => s.dueDateFilters);
+  const advancedFilter = useViewStore((s) => s.advancedFilter);
+  const negatedFilters = useViewStore((s) => s.negatedFilters);
   const propertyFilters = useViewStore((s) => s.propertyFilters);
   const viewStoreApi = useViewStoreApi();
   const act = viewStoreApi.getState();
+  const advancedMode = advancedFilter !== null;
+  const [panelOpen, setPanelOpen] = useState(false);
+  // Leaving advanced mode from inside the panel unmounts it with no close
+  // event; the next entry must start closed until asked.
+  useEffect(() => {
+    if (!advancedMode) setPanelOpen(false);
+  }, [advancedMode]);
+  const [search, setSearch] = useState("");
+  const query = search.trim().toLowerCase();
+  const fieldLabels = useFilterFieldLabels();
+  const valueCatalog = useFilterValueCatalog(query.length > 0);
+  const searchFields = NEGATABLE_FILTER_DIMENSIONS.filter(
+    (field) => (showRelation || field !== "relation") && !hiddenFields?.includes(field),
+  );
   const wsId = useWorkspaceId();
   const statusOptions = useStatusOptions(wsId);
   const { data: workspaceProperties = [] } = useQuery(propertyListOptions(wsId));
@@ -1252,13 +1091,21 @@ export function IssueFilterMenu({
         includeNoProject,
         projectStatusFilters,
         labelFilters,
+        relationFilters: showRelation ? relationFilters : [],
+        dueDateFilters,
+        negatedFilters,
+        advancedFilter,
         dateFilter: showDateFilter ? dateFilter : null,
       },
       viewBaseline,
     ) > 0;
   const fixedTitle = viewBaseline ? t(($) => $.filters.in_view) : undefined;
-  const { chips } = useFilterChips(showDateFilter ? dateFilter : null, onDateFilterChange, viewBaseline);
+  const { chips: allChips } = useFilterChips(showDateFilter ? dateFilter : null, onDateFilterChange, viewBaseline);
+  const chips = showRelation ? allChips : allChips.filter((chip) => chip.key !== "relation");
   const chipByKey = new Map(chips.map((chip) => [chip.key, chip]));
+  const triggerValue = (key: string) => (
+    <FilterTriggerValue chip={chipByKey.get(key)} modified={modifiedKeys?.has(key)} />
+  );
   const [activeAtOpen, setActiveAtOpen] = useState<ReadonlySet<string> | null>(null);
   const activeKeys = activeAtOpen ?? new Set(chipByKey.keys());
   const dateFilterLabel = showDateFilter && dateFilter
@@ -1274,10 +1121,19 @@ export function IssueFilterMenu({
   // opens, so a row never jumps out from under the pointer mid-edit.
   const inPass = (key: string, pass: "active" | "rest") =>
     activeKeys.has(key) === (pass === "active");
-  const renderFieldSections = (pass: "active" | "rest") => (
+  const sectionLabel = (key: string) =>
+    key === "date"
+      ? t(($) => $.filters.section_date)
+      : key.startsWith("property:")
+        ? filterableProperties.find((p) => `property:${p.id}` === key)?.name ?? ""
+        : fieldLabels[key as NegatableFilterDimension] ?? "";
+  const renderFieldSections = (pass: "active" | "rest" | "search") => {
+    const show = (key: string) =>
+      pass === "search" ? matchesFilterQuery(sectionLabel(key), query) : inPass(key, pass);
+    return (
           <>
             {/* Status */}
-            {inPass("status", pass) && (
+            {show("status") && (
             <DropdownMenuSub
               onOpenChange={(open) =>
                 onTableFacetChange?.(open ? { kind: "status" } : null)
@@ -1286,9 +1142,10 @@ export function IssueFilterMenu({
               <DropdownMenuSubTrigger>
                 <CircleDot className="size-3.5" />
                 <span className="flex-1">{t(($) => $.filters.section_status)}</span>
-                <FilterTriggerValue chip={chipByKey.get("status")} />
+                {triggerValue("status")}
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent className="w-auto min-w-48">
+                <FilterOperatorSwitch dimension="status" />
                 {/* Options come from the workspace catalog, so a custom status
                     is filterable — otherwise an issue moved onto one could not
                     be narrowed to. One flat list in category order: the icon
@@ -1330,7 +1187,7 @@ export function IssueFilterMenu({
             )}
 
             {/* Priority */}
-            {inPass("priority", pass) && (
+            {show("priority") && (
             <DropdownMenuSub
               onOpenChange={(open) =>
                 onTableFacetChange?.(open ? { kind: "priority" } : null)
@@ -1339,9 +1196,10 @@ export function IssueFilterMenu({
               <DropdownMenuSubTrigger>
                 <SignalHigh className="size-3.5" />
                 <span className="flex-1">{t(($) => $.filters.section_priority)}</span>
-                <FilterTriggerValue chip={chipByKey.get("priority")} />
+                {triggerValue("priority")}
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent className="w-auto min-w-44">
+                <FilterOperatorSwitch dimension="priority" />
                 {PRIORITY_DISPLAY_ORDER.map((p) => {
                   const checked = priorityFilters.includes(p);
                   const count = counts.priority.get(p) ?? 0;
@@ -1370,7 +1228,7 @@ export function IssueFilterMenu({
             </DropdownMenuSub>
             )}
 
-            {showDateFilter && onDateFilterChange && inPass("date", pass) && (
+            {showDateFilter && onDateFilterChange && show("date") && (
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger>
                   <CalendarDays className="size-3.5" />
@@ -1391,7 +1249,7 @@ export function IssueFilterMenu({
             )}
 
             {/* Assignee */}
-            {inPass("assignee", pass) && (
+            {show("assignee") && (
             <DropdownMenuSub
               onOpenChange={(open) =>
                 onTableFacetChange?.(open ? { kind: "assignee" } : null)
@@ -1400,9 +1258,10 @@ export function IssueFilterMenu({
               <DropdownMenuSubTrigger>
                 <User className="size-3.5" />
                 <span className="flex-1">{t(($) => $.filters.section_assignee)}</span>
-                <FilterTriggerValue chip={chipByKey.get("assignee")} />
+                {triggerValue("assignee")}
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent className="w-auto min-w-52 p-0">
+                <FilterOperatorSwitch dimension="assignee" />
                 <ActorSubContent
                   counts={counts.assignee}
                   selected={assigneeFilters}
@@ -1420,7 +1279,7 @@ export function IssueFilterMenu({
             )}
 
             {/* Creator */}
-            {inPass("creator", pass) && (
+            {show("creator") && (
             <DropdownMenuSub
               onOpenChange={(open) =>
                 onTableFacetChange?.(open ? { kind: "creator" } : null)
@@ -1429,9 +1288,10 @@ export function IssueFilterMenu({
               <DropdownMenuSubTrigger>
                 <UserPen className="size-3.5" />
                 <span className="flex-1">{t(($) => $.filters.section_creator)}</span>
-                <FilterTriggerValue chip={chipByKey.get("creator")} />
+                {triggerValue("creator")}
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent className="w-auto min-w-52 p-0">
+                <FilterOperatorSwitch dimension="creator" />
                 <ActorSubContent
                   counts={counts.creator}
                   selected={creatorFilters}
@@ -1444,8 +1304,42 @@ export function IssueFilterMenu({
             </DropdownMenuSub>
             )}
 
+            {/* Relation to me — OR across assigned / created / my agents,
+                which no single actor dimension can express. */}
+            {showRelation && show("relation") && (
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <CircleUser className="size-3.5" />
+                <span className="flex-1">{t(($) => $.filters.section_relation)}</span>
+                {triggerValue("relation")}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="w-auto min-w-52">
+                <FilterOperatorSwitch dimension="relation" />
+                {ISSUE_RELATION_FILTERS.map((relation) => {
+                  const checked = relationFilters.includes(relation);
+                  const fixed = viewBaseline?.relation.has(relation) === true;
+                  const Icon = RELATION_ICONS[relation];
+                  return (
+                    <DropdownMenuCheckboxItem
+                      key={relation}
+                      checked={checked}
+                      disabled={fixed}
+                      title={fixed ? fixedTitle : undefined}
+                      onCheckedChange={() => act.toggleRelationFilter(relation)}
+                      className={FILTER_ITEM_CLASS}
+                    >
+                      <HoverCheck checked={checked} />
+                      <Icon className="size-3.5 text-muted-foreground" />
+                      {t(($) => $.filters[RELATION_LABEL_KEY[relation]])}
+                    </DropdownMenuCheckboxItem>
+                  );
+                })}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+            )}
+
             {/* Project */}
-            {inPass("project", pass) && (
+            {show("project") && (
             <DropdownMenuSub
               onOpenChange={(open) =>
                 onTableFacetChange?.(open ? { kind: "project" } : null)
@@ -1454,9 +1348,10 @@ export function IssueFilterMenu({
               <DropdownMenuSubTrigger>
                 <FolderKanban className="size-3.5" />
                 <span className="flex-1">{t(($) => $.filters.section_project)}</span>
-                <FilterTriggerValue chip={chipByKey.get("project")} />
+                {triggerValue("project")}
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent className="w-auto min-w-52 p-0">
+                <FilterOperatorSwitch dimension="project" />
                 <ProjectSubContent
                   counts={counts.project}
                   selected={projectFilters}
@@ -1475,14 +1370,15 @@ export function IssueFilterMenu({
             {/* Project status — a dimension of its own next to Project:
                 "everything in the projects that are in progress", without
                 naming them one by one. */}
-            {inPass("projectStatus", pass) && (
+            {show("projectStatus") && (
             <DropdownMenuSub>
               <DropdownMenuSubTrigger>
                 <CircleDashed className="size-3.5" />
                 <span className="flex-1">{t(($) => $.filters.section_project_status)}</span>
-                <FilterTriggerValue chip={chipByKey.get("projectStatus")} />
+                {triggerValue("projectStatus")}
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent className="w-auto min-w-52 p-0">
+                <FilterOperatorSwitch dimension="projectStatus" />
                 <ProjectStatusSubContent
                   selected={projectStatusFilters}
                   onToggle={act.toggleProjectStatusFilter}
@@ -1494,7 +1390,7 @@ export function IssueFilterMenu({
             )}
 
             {/* Label */}
-            {inPass("label", pass) && (
+            {show("label") && (
             <DropdownMenuSub
               onOpenChange={(open) =>
                 onTableFacetChange?.(open ? { kind: "label" } : null)
@@ -1503,9 +1399,10 @@ export function IssueFilterMenu({
               <DropdownMenuSubTrigger>
                 <Tag className="size-3.5" />
                 <span className="flex-1">{t(($) => $.filters.section_label)}</span>
-                <FilterTriggerValue chip={chipByKey.get("label")} />
+                {triggerValue("label")}
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent className="w-auto min-w-52 p-0">
+                <FilterOperatorSwitch dimension="label" />
                 <LabelSubContent
                   counts={counts.label}
                   selected={labelFilters}
@@ -1517,9 +1414,42 @@ export function IssueFilterMenu({
             </DropdownMenuSub>
             )}
 
+            {/* Due date — relative buckets, so a saved view keeps meaning
+                "overdue" tomorrow. */}
+            {show("dueDate") && (
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <CalendarClock className="size-3.5" />
+                <span className="flex-1">{t(($) => $.filters.section_due_date)}</span>
+                {triggerValue("dueDate")}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="w-auto min-w-52">
+                <FilterOperatorSwitch dimension="dueDate" />
+                {DUE_DATE_FILTERS.map((bucket) => {
+                  const checked = dueDateFilters.includes(bucket);
+                  const fixed = viewBaseline?.dueDate.has(bucket) === true;
+                  return (
+                    <DropdownMenuCheckboxItem
+                      key={bucket}
+                      checked={checked}
+                      disabled={fixed}
+                      title={fixed ? fixedTitle : undefined}
+                      onCheckedChange={() => act.toggleDueDateFilter(bucket)}
+                      className={FILTER_ITEM_CLASS}
+                    >
+                      <HoverCheck checked={checked} />
+                      <CalendarClock className="size-3.5 text-muted-foreground" />
+                      {t(($) => $.filters[DUE_DATE_LABEL_KEY[bucket]])}
+                    </DropdownMenuCheckboxItem>
+                  );
+                })}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+            )}
+
             {/* Custom properties — one sub per filterable definition */}
-            {pass === "rest" && filterableProperties.some((p) => inPass(`property:${p.id}`, pass)) && <DropdownMenuSeparator />}
-            {filterableProperties.filter((property) => inPass(`property:${property.id}`, pass)).map((property) => {
+            {pass === "rest" && filterableProperties.some((p) => show(`property:${p.id}`)) && <DropdownMenuSeparator />}
+            {filterableProperties.filter((property) => show(`property:${property.id}`)).map((property) => {
               const selected = propertyFilters[property.id] ?? [];
               return (
                 <DropdownMenuSub
@@ -1539,7 +1469,7 @@ export function IssueFilterMenu({
                       <SlidersHorizontal className="size-3.5" />
                     )}
                     <span className="flex-1 truncate">{property.name}</span>
-                    <FilterTriggerValue chip={chipByKey.get(`property:${property.id}`)} />
+                    {triggerValue(`property:${property.id}`)}
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent className="w-auto min-w-44 p-1">
                     <PropertyFilterOptions
@@ -1557,13 +1487,178 @@ export function IssueFilterMenu({
             })}
 
           </>
-  );
+    );
+  };
 
   // Base UI's render-prop merges its own ref with ours, so cloning the
   // caller's element only adds the ref we need for rect capture.
   const anchoredTrigger = freezeAnchor
     ? cloneElement(trigger, { ref: triggerRef } as Partial<React.HTMLAttributes<HTMLElement>>)
     : trigger;
+
+  // Search: matching fields keep their submenus; matching values become
+  // one-click rows that read as the condition they add.
+  const simpleFields = {
+    statusFilters, priorityFilters, assigneeFilters, includeNoAssignee, creatorFilters,
+    projectFilters, includeNoProject, projectStatusFilters, labelFilters, relationFilters,
+    dueDateFilters,
+  };
+  const negatedSet = new Set(negatedFilters);
+  const fixedValue = (field: NegatableFilterDimension, value: string) => {
+    if (!viewBaseline) return false;
+    if (value === "none" && field === "assignee") return viewBaseline.includeNoAssignee;
+    if (value === "none" && field === "project") return viewBaseline.includeNoProject;
+    return viewBaseline[field].has(value);
+  };
+  const sectionKeys = [
+    ...searchFields.filter((field) => field !== "relation" || showRelation),
+    ...(showDateFilter ? ["date"] : []),
+    ...filterableProperties.map((p) => `property:${p.id}`),
+  ];
+  const fieldHits = query ? sectionKeys.filter((key) => matchesFilterQuery(sectionLabel(key), query)) : [];
+  const valueHits = query
+    ? searchFields
+        .flatMap((field) =>
+          valueCatalog(field)
+            .filter((option) => matchesFilterQuery(option.label, query))
+            .map((option) => ({ field, option })),
+        )
+        .slice(0, 50)
+    : [];
+
+  const menuBody = query ? (
+    <>
+      {fieldHits.length > 0 && (
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>{t(($) => $.filters.search_fields)}</DropdownMenuLabel>
+          {renderFieldSections("search")}
+        </DropdownMenuGroup>
+      )}
+      {fieldHits.length > 0 && valueHits.length > 0 && <DropdownMenuSeparator />}
+      {valueHits.length > 0 && (
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>{t(($) => $.filters.search_values)}</DropdownMenuLabel>
+          {valueHits.map(({ field, option }) => {
+            const checked = simpleFieldValues(simpleFields, field).includes(option.value);
+            const fixed = fixedValue(field, option.value);
+            const FieldIcon = FILTER_FIELD_ICONS[field];
+            return (
+              <DropdownMenuCheckboxItem
+                key={`${field}:${option.value}`}
+                checked={checked}
+                disabled={fixed}
+                title={fixed ? fixedTitle : undefined}
+                onCheckedChange={() => toggleSimpleFilterValue(act, field, option.value)}
+                className={FILTER_ITEM_CLASS}
+              >
+                <HoverCheck checked={checked} />
+                <FieldIcon className="size-3.5 text-muted-foreground" />
+                <span className="shrink-0 text-muted-foreground">{fieldLabels[field]}</span>
+                <FilterOperator negated={negatedSet.has(field)} />
+                {option.icon}
+                <span className="truncate">{option.label}</span>
+              </DropdownMenuCheckboxItem>
+            );
+          })}
+        </DropdownMenuGroup>
+      )}
+      {fieldHits.length === 0 && valueHits.length === 0 && (
+        <div className="px-2 py-3 text-center text-body text-muted-foreground">
+          {t(($) => $.filters.no_results)}
+        </div>
+      )}
+    </>
+  ) : (
+    <>
+      {leadingSections && (
+        <>
+          {leadingSections}
+          <DropdownMenuSeparator />
+        </>
+      )}
+      {activeKeys.size > 0 && (
+        <>
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>{t(($) => $.filters.active_section)}</DropdownMenuLabel>
+            {renderFieldSections("active")}
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+        </>
+      )}
+      {renderFieldSections("rest")}
+
+      <DropdownMenuSeparator />
+      <DropdownMenuItem
+        onClick={() => {
+          act.enterAdvancedFilter();
+          setPanelOpen(true);
+        }}
+      >
+        <ListTree className="size-3.5" />
+        {t(($) => $.filters.advanced_switch)}
+        <span className="ml-auto pl-4 text-caption text-muted-foreground">
+          {t(($) => $.filters.advanced_switch_hint)}
+        </span>
+      </DropdownMenuItem>
+
+      {/* Reset */}
+      {hasActiveFilters && (
+        <DropdownMenuItem
+          onClick={() => {
+            if (viewBaseline) {
+              // Inside a saved view, reset returns to the view's own
+              // conditions, never to nothing.
+              act.resetFiltersTo(viewBaseline.raw);
+            } else {
+              act.clearFilters();
+            }
+            onDateFilterChange?.(null);
+          }}
+        >
+          {t(($) => $.filters.reset)}
+        </DropdownMenuItem>
+      )}
+    </>
+  );
+
+  const tooltipContent =
+    summaryTitle && chips.length > 0 ? (
+      <TooltipContent side="bottom" align="start" className="max-w-sm">
+        <FilterSummary title={summaryTitle} chips={chips} modifiedKeys={modifiedKeys} />
+      </TooltipContent>
+    ) : (
+      <TooltipContent side="bottom">{tooltip}</TooltipContent>
+    );
+  const withTooltip = !!(summaryTitle || tooltip);
+
+  // Advanced mode: the same trigger opens the rule panel instead of the menu.
+  if (advancedMode) {
+    return (
+      <Popover
+        open={panelOpen}
+        onOpenChange={(open) => {
+          setPanelOpen(open);
+          onOpenChange?.(open);
+        }}
+      >
+        {withTooltip ? (
+          <Tooltip disabled={(!tooltip && chips.length === 0) || panelOpen}>
+            <PopoverTrigger render={<TooltipTrigger render={trigger} />} />
+            {tooltipContent}
+          </Tooltip>
+        ) : (
+          <PopoverTrigger render={trigger} />
+        )}
+        <PopoverContent
+          align={align}
+          className="w-[680px] max-w-[calc(100vw-2rem)] gap-0 p-0"
+          data-testid="advanced-filter-panel"
+        >
+          <AdvancedFilterPanel fields={searchFields} />
+        </PopoverContent>
+      </Popover>
+    );
+  }
 
   return (
     <DropdownMenu
@@ -1577,56 +1672,38 @@ export function IssueFilterMenu({
           }
         }
         setActiveAtOpen(open ? new Set(chipByKey.keys()) : null);
-        if (!open) onTableFacetChange?.(null);
+        if (!open) {
+          setSearch("");
+          onTableFacetChange?.(null);
+        }
         onOpenChange?.(open);
       }}
     >
-      {tooltip ? (
-        <Tooltip>
+      {/* One tree for both bodies: swapping wrappers when the first filter
+          lands would remount the trigger and strand the open menu's anchor. */}
+      {withTooltip ? (
+        <Tooltip disabled={(!tooltip && chips.length === 0) || (!!summaryTitle && activeAtOpen !== null)}>
           <DropdownMenuTrigger render={<TooltipTrigger render={anchoredTrigger} />} />
-          <TooltipContent side="bottom">{tooltip}</TooltipContent>
+          {tooltipContent}
         </Tooltip>
       ) : (
         <DropdownMenuTrigger render={anchoredTrigger} />
       )}
-          <DropdownMenuContent align={align} className="w-auto" anchor={frozenAnchor ?? undefined}>
-            {leadingSections && (
-              <>
-                {leadingSections}
-                <DropdownMenuSeparator />
-              </>
-            )}
-            {activeKeys.size > 0 && (
-              <>
-                <DropdownMenuGroup>
-                  <DropdownMenuLabel>{t(($) => $.filters.active_section)}</DropdownMenuLabel>
-                  {renderFieldSections("active")}
-                </DropdownMenuGroup>
-                <DropdownMenuSeparator />
-              </>
-            )}
-            {renderFieldSections("rest")}
-
-            {/* Reset */}
-            {hasActiveFilters && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => {
-                    if (viewBaseline) {
-                      // Inside a saved view, reset returns to the view's own
-                      // conditions, never to nothing.
-                      act.resetFiltersTo(viewBaseline.raw);
-                    } else {
-                      act.clearFilters();
-                    }
-                    onDateFilterChange?.(null);
-                  }}
-                >
-                  {t(($) => $.filters.reset)}
-                </DropdownMenuItem>
-              </>
-            )}
+          <DropdownMenuContent align={align} className="w-auto min-w-64 p-0" anchor={frozenAnchor ?? undefined}>
+            <div data-filter-search className="flex items-center gap-1.5 border-b border-foreground/5 px-2.5 py-2">
+              <Search className="size-3.5 shrink-0 text-muted-foreground" />
+              <input
+                type="text"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                onKeyDown={stopMenuSearchKeys}
+                placeholder={t(($) => $.filters.search_placeholder)}
+                aria-label={t(($) => $.filters.search_placeholder)}
+                className="w-full bg-transparent text-body outline-none placeholder:text-muted-foreground"
+                autoFocus
+              />
+            </div>
+            <div className="max-h-[min(70vh,36rem)] overflow-y-auto p-1">{menuBody}</div>
           </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -1690,6 +1767,10 @@ export function IssueDisplayControls({
   const projectStatusFilters = useViewStore((s) => s.projectStatusFilters);
   const labelFilters = useViewStore((s) => s.labelFilters);
   const propertyFilters = useViewStore((s) => s.propertyFilters);
+  const relationFilters = useViewStore((s) => s.relationFilters);
+  const dueDateFilters = useViewStore((s) => s.dueDateFilters);
+  const advancedFilter = useViewStore((s) => s.advancedFilter);
+  const negatedFilters = useViewStore((s) => s.negatedFilters);
   const cardPropertyIds = useViewStore((s) => s.cardPropertyIds);
   const sortBy = useViewStore((s) => s.sortBy);
   const sortDirection = useViewStore((s) => s.sortDirection);
@@ -1765,6 +1846,10 @@ export function IssueDisplayControls({
       includeNoProject,
       projectStatusFilters,
       labelFilters,
+      relationFilters,
+      dueDateFilters,
+      negatedFilters,
+      advancedFilter,
       dateFilter: showDateFilter ? dateFilter : null,
     },
     viewBaseline,
