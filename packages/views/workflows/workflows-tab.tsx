@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowRight,
@@ -385,8 +385,11 @@ function StepChain({ steps }: { steps: IssueWorkflowStep[] }) {
         const { type, id } = step.handler;
         const handler = handlerLabel(step);
         const actor = (type === "agent" || type === "squad" || type === "member") && id ? { type, id } : null;
+        // The arrow travels with the step it points to, so a wrapped line
+        // starts with "→ step" instead of ending on an arrow beside the
+        // row's chevron.
         return (
-          <Fragment key={step.status_key}>
+          <span key={step.status_key} className="inline-flex items-center gap-1">
             {index > 0 && <ArrowRight aria-hidden className="size-3 text-faint-foreground" />}
             <span
               className={`inline-flex h-[22px] items-center gap-1.5 rounded-full border border-surface-border bg-card pl-2 text-caption ${handler ? "pr-0.5" : "pr-2"}`}
@@ -412,7 +415,7 @@ function StepChain({ steps }: { steps: IssueWorkflowStep[] }) {
                 </span>
               )}
             </span>
-          </Fragment>
+          </span>
         );
       })}
     </div>

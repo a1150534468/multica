@@ -130,7 +130,8 @@ describe("WorkflowsTab list (MUL-8377)", () => {
     );
     renderTab([]);
 
-    const chip = (text: string) => screen.getByText((_, el) => el?.tagName === "SPAN" && el.textContent === text);
+    // A step's arrow travels in a wrapper with the same text, so take the innermost match.
+    const chip = (text: string) => screen.getAllByText((_, el) => el?.tagName === "SPAN" && el.textContent === text).at(-1)!;
     expect(within(chip("TodoLambda")).getByTestId("avatar-agent-1")).toBeTruthy();
     expect(chip("In ProgressProject lead")).toBeTruthy();
     expect(chip("In Review")).toBeTruthy();
