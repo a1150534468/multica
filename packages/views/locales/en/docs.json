@@ -134,5 +134,13 @@
     "title": "This doc doesn't exist or was deleted",
     "folder": "This folder doesn't exist or was deleted",
     "back": "Back to the knowledge base"
+  },
+  "project": {
+    "title": "Docs",
+    "empty": "No docs linked yet",
+    "link": "Link doc",
+    "search": "Search docs…",
+    "no_results": "No docs to link",
+    "unlink": "Unlink {{title}}"
   }
 }

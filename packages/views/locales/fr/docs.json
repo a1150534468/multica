@@ -134,5 +134,13 @@
     "title": "Ce document n'existe pas ou a été supprimé",
     "folder": "Ce dossier n'existe pas ou a été supprimé",
     "back": "Retour à la base de connaissances"
+  },
+  "project": {
+    "title": "Documents",
+    "empty": "Aucun document lié",
+    "link": "Lier un document",
+    "search": "Rechercher des documents…",
+    "no_results": "Aucun document à lier",
+    "unlink": "Délier {{title}}"
   }
 }
