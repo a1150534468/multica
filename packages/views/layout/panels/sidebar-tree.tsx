@@ -47,7 +47,8 @@ interface TreeRowProps extends React.ComponentProps<"div"> {
 
 /**
  * A nav row that expands in place. The link stretches over the whole row so
- * the row still opens its page; the chevron after the label only toggles.
+ * the row still opens its page; the chevron, shown in the icon's place on
+ * hover, only toggles.
  */
 export const TreeRow = forwardRef<HTMLAnchorElement, TreeRowProps>(function TreeRow(
   {
@@ -91,7 +92,38 @@ export const TreeRow = forwardRef<HTMLAnchorElement, TreeRowProps>(function Tree
         className,
       )}
     >
-      {icon}
+      {onExpandedChange ? (
+        // The toggle takes the icon's place on hover, so the label keeps the
+        // row's width.
+        <span className="relative flex size-4 shrink-0 items-center justify-center">
+          <span className="flex transition-opacity group-focus-within/row:opacity-0 group-hover/row:opacity-0 [@media(pointer:coarse)]:opacity-0">
+            {icon}
+          </span>
+          <button
+            type="button"
+            aria-label={toggleLabel}
+            aria-expanded={expanded}
+            aria-controls={expanded ? listId : undefined}
+            onClick={() => onExpandedChange(!expanded)}
+            onKeyDown={onKeyDown}
+            onPointerDown={(event) => event.stopPropagation()}
+            onPointerEnter={onPrefetch}
+            className={cn(
+              TREE_ROW_BUTTON_CLASS,
+              "absolute text-muted-foreground opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100 [@media(pointer:coarse)]:opacity-100",
+            )}
+          >
+            <ChevronRight
+              className={cn(
+                "size-3.5 transition-transform duration-150 ease-out motion-reduce:transition-none",
+                expanded && "rotate-90",
+              )}
+            />
+          </button>
+        </span>
+      ) : (
+        icon
+      )}
       <AppLink
         ref={linkRef}
         href={href}
@@ -100,35 +132,10 @@ export const TreeRow = forwardRef<HTMLAnchorElement, TreeRowProps>(function Tree
         aria-current={active ? "page" : undefined}
         onKeyDown={onKeyDown}
         onClick={onNavigate}
-        className="min-w-0 truncate outline-none after:absolute after:inset-0 after:rounded-lg focus-visible:after:outline-2 focus-visible:after:outline-ring"
+        className="min-w-0 flex-1 truncate outline-none after:absolute after:inset-0 after:rounded-lg focus-visible:after:outline-2 focus-visible:after:outline-ring"
       >
         {label}
       </AppLink>
-      {onExpandedChange && <button
-        type="button"
-        aria-label={toggleLabel}
-        aria-expanded={expanded}
-        aria-controls={expanded ? listId : undefined}
-        onClick={() => onExpandedChange(!expanded)}
-        onKeyDown={onKeyDown}
-        onPointerDown={(event) => event.stopPropagation()}
-        onPointerEnter={onPrefetch}
-        className={cn(
-          TREE_ROW_BUTTON_CLASS,
-          "-ml-1 text-faint-foreground",
-          expanded
-            ? "opacity-100"
-            : "opacity-0 group-hover/row:opacity-100 [@media(pointer:coarse)]:opacity-100",
-        )}
-      >
-        <ChevronRight
-          className={cn(
-            "size-3.5 transition-transform duration-150 ease-out motion-reduce:transition-none",
-            expanded && "rotate-90",
-          )}
-        />
-      </button>}
-      <span className="flex-1" />
       {trailing}
     </div>
   );
