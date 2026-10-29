@@ -107,7 +107,9 @@
     "use_theirs": "改用 {{name}} 的",
     "use_theirs_failed": "這幾行又被改過了，請手動修改",
     "view_changes": "查看改動",
-    "unread_banner": "自你上次開啟後有新改動，最近一次來自 {{name}}"
+    "unread_banner": "自你上次開啟後有新改動，最近一次來自 {{name}}",
+    "refresh_failed": "無法載入最新版本，你的修改仍保留在這裡。",
+    "retry": "重試"
   },
   "history": {
     "title": "歷史",

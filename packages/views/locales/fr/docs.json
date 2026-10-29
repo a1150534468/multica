@@ -109,7 +109,9 @@
     "use_theirs": "Garder la version de {{name}}",
     "use_theirs_failed": "Ces lignes ont encore changé ; modifiez-les à la main",
     "view_changes": "Voir les modifications",
-    "unread_banner": "Modifié depuis votre dernière visite, en dernier par {{name}}"
+    "unread_banner": "Modifié depuis votre dernière visite, en dernier par {{name}}",
+    "refresh_failed": "Impossible de charger la dernière version. Vos modifications sont conservées ici.",
+    "retry": "Réessayer"
   },
   "history": {
     "title": "Historique",

@@ -107,7 +107,9 @@
     "use_theirs": "{{name}}님 것 사용",
     "use_theirs_failed": "해당 줄이 다시 바뀌었습니다. 직접 수정하세요",
     "view_changes": "변경 사항 보기",
-    "unread_banner": "마지막으로 연 이후 변경됨(최근: {{name}})"
+    "unread_banner": "마지막으로 연 이후 변경됨(최근: {{name}})",
+    "refresh_failed": "최신 버전을 불러오지 못했습니다. 편집 내용은 여기에 그대로 있습니다.",
+    "retry": "다시 시도"
   },
   "history": {
     "title": "기록",

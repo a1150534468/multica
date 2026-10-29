@@ -109,7 +109,9 @@
     "use_theirs": "Use {{name}}'s",
     "use_theirs_failed": "Those lines changed again; edit them by hand",
     "view_changes": "View changes",
-    "unread_banner": "Changed since you last opened it, most recently by {{name}}"
+    "unread_banner": "Changed since you last opened it, most recently by {{name}}",
+    "refresh_failed": "Couldn't load the latest version. Your edits are kept here.",
+    "retry": "Retry"
   },
   "history": {
     "title": "History",

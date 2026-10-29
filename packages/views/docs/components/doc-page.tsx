@@ -349,12 +349,25 @@ function UnreadBanner({ doc, since, onDismiss }: { doc: Doc; since: string | nul
   );
 }
 
+function RefreshFailedBanner({ onRetry }: { onRetry: () => void }) {
+  const { t } = useT("docs");
+  return (
+    <div role="alert" className="flex shrink-0 items-center gap-2 border-b border-warning/30 bg-warning/10 px-4 py-1.5 text-caption">
+      <AlertTriangle className="size-3.5 shrink-0 text-warning" />
+      <span className="min-w-0 flex-1 truncate text-foreground">{t(($) => $.editor.refresh_failed)}</span>
+      <Button size="xs" variant="outline" onClick={onRetry}>
+        {t(($) => $.editor.retry)}
+      </Button>
+    </div>
+  );
+}
+
 export function DocDetailPage({ docId }: { docId: string }) {
   const { t } = useT("docs");
   const wsId = useWorkspaceId();
   const p = useWorkspacePaths();
   const navigation = useNavigation();
-  const { data: doc, isPending, error } = useQuery(docDetailOptions(wsId, docId));
+  const { data: doc, isPending, error, refetch } = useQuery(docDetailOptions(wsId, docId));
   const markRead = useMarkDocRead();
   const [panelOpen, setPanelOpen] = useState(true);
   const [moveTarget, setMoveTarget] = useState<MoveTarget | null>(null);
@@ -386,7 +399,9 @@ export function DocDetailPage({ docId }: { docId: string }) {
     );
   }
 
-  if (error || !doc) {
+  // Only a doc that never loaded gets the error page. Once it has, a failed
+  // background refresh must leave the editor — and its unsaved draft — alone.
+  if (!doc) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
         <AlertCircle className="size-8 text-faint-foreground" />
@@ -455,7 +470,12 @@ export function DocDetailPage({ docId }: { docId: string }) {
           key={doc.id}
           doc={doc}
           actions={actions}
-          banner={unread && <UnreadBanner doc={doc} since={unread.since} onDismiss={() => setUnread(null)} />}
+          banner={
+            <>
+              {error && <RefreshFailedBanner onRetry={() => void refetch()} />}
+              {unread && <UnreadBanner doc={doc} since={unread.since} onDismiss={() => setUnread(null)} />}
+            </>
+          }
         />
       </div>
       {panelOpen && (
