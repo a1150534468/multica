@@ -237,10 +237,7 @@ export function useDocDraft(doc: Doc, io: DraftIO) {
 
   const acceptTheirs = useCallback(() => {
     if (notice?.kind !== "conflict") return;
-    let text: string | null = ioRef.current.read();
-    for (const conflict of notice.conflicts) {
-      text = text === null ? null : applyTheirs(text, conflict);
-    }
+    const text = applyTheirs(ioRef.current.read(), notice.conflicts);
     if (text === null) {
       toast.error(t(($) => $.editor.use_theirs_failed));
       return;

@@ -28,7 +28,9 @@ describe("reconcileRemote", () => {
     expect(outcome.kind).toBe("merge");
     if (outcome.kind !== "merge") return;
     expect(outcome.content).toBe("one\nmine\nthree");
-    expect(outcome.conflicts).toEqual([{ mine: ["mine"], theirs: ["theirs"], base: ["two"] }]);
+    expect(outcome.conflicts).toEqual([
+      { mine: ["mine"], theirs: ["theirs"], base: ["two"], at: 1, before: ["one"], after: ["three"] },
+    ]);
   });
 });
 

@@ -34,8 +34,17 @@ describe("mergeText", () => {
     const theirs = base.replace("step two", "step zwei");
     const result = mergeText(base, mine, theirs);
     expect(result.text).toBe(mine);
-    expect(result.conflicts).toEqual([{ mine: ["step deux"], theirs: ["step zwei"], base: ["step two"] }]);
-    expect(applyTheirs(result.text, result.conflicts[0]!)).toBe(theirs);
+    expect(result.conflicts).toEqual([
+      {
+        mine: ["step deux"],
+        theirs: ["step zwei"],
+        base: ["step two"],
+        at: 4,
+        before: ["step one", ""],
+        after: ["", "step three"],
+      },
+    ]);
+    expect(applyTheirs(result.text, result.conflicts)).toBe(theirs);
   });
 
   it("treats identical edits on both sides as agreement", () => {
@@ -49,7 +58,41 @@ describe("mergeText", () => {
   });
 
   it("returns null from applyTheirs once the contested lines were edited again", () => {
-    expect(applyTheirs("other", { mine: ["gone"], theirs: ["x"], base: [] })).toBeNull();
+    const result = mergeText(base, base.replace("step two", "mine"), base.replace("step two", "theirs"));
+    expect(applyTheirs(result.text.replace("mine", "edited again"), result.conflicts)).toBeNull();
+  });
+});
+
+describe("applyTheirs", () => {
+  const base = "# Plan\n\nstep one\n\nstep two\n\nstep three";
+
+  it("puts theirs back where mine deleted the line, not at the top", () => {
+    const result = mergeText("a\nb\nc", "a\nc", "a\nB\nc");
+    expect(result.conflicts[0]?.mine).toEqual([]);
+    expect(applyTheirs(result.text, result.conflicts)).toBe("a\nB\nc");
+  });
+
+  it("replaces the contested copy of a repeated line, not an earlier one", () => {
+    const result = mergeText("dup\nkeep\nline\nend", "dup\nkeep\ndup\nend", "dup\nkeep\ntheirs\nend");
+    expect(result.text).toBe("dup\nkeep\ndup\nend");
+    expect(applyTheirs(result.text, result.conflicts)).toBe("dup\nkeep\ntheirs\nend");
+  });
+
+  it("follows the region when lines were added above it after the merge", () => {
+    const result = mergeText(base, base.replace("step two", "mine"), base.replace("step two", "theirs"));
+    const shifted = `intro\n\n${result.text}`;
+    expect(applyTheirs(shifted, result.conflicts)).toBe(`intro\n\n${base.replace("step two", "theirs")}`);
+  });
+
+  it("refuses when the region's context is no longer unique", () => {
+    const result = mergeText("a\nb\nc", "a\nc", "a\nB\nc");
+    expect(applyTheirs("a\nc\na\nc", result.conflicts)).toBeNull();
+  });
+
+  it("applies conflicts one line apart without one breaking the other", () => {
+    const result = mergeText("1\n2\n3\n4\n5", "1\nx\n3\ny\n5", "1\nX\n3\nY\n5");
+    expect(result.conflicts).toHaveLength(2);
+    expect(applyTheirs(result.text, result.conflicts)).toBe("1\nX\n3\nY\n5");
   });
 });
 

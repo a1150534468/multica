@@ -115,7 +115,17 @@ export interface MergeConflict {
   /** The other writer's lines for the same region. */
   theirs: string[];
   base: string[];
+  /** Line index in the merged text where `mine` starts. */
+  at: number;
+  /**
+   * Up to {@link CONTEXT_LINES} merged lines on each side of the region. Fewer
+   * than that means the region sits that close to the start or end.
+   */
+  before: string[];
+  after: string[];
 }
+
+const CONTEXT_LINES = 2;
 
 export interface MergeResult {
   /** Merged lines; contested regions hold `mine`. */
@@ -157,12 +167,18 @@ export function merge3(base: readonly string[], mine: readonly string[], theirs:
     } else if (t.length === 0 || x.join("\n") === y.join("\n")) {
       lines.push(...x);
     } else {
+      const at = lines.length;
       lines.push(...x);
-      conflicts.push({ mine: x, theirs: y, base: base.slice(c.start, c.end) });
+      conflicts.push({ mine: x, theirs: y, base: base.slice(c.start, c.end), at, before: [], after: [] });
     }
     i = c.end;
   }
   lines.push(...base.slice(i));
+  for (const conflict of conflicts) {
+    const end = conflict.at + conflict.mine.length;
+    conflict.before = lines.slice(Math.max(0, conflict.at - CONTEXT_LINES), conflict.at);
+    conflict.after = lines.slice(end, end + CONTEXT_LINES);
+  }
   return { lines, conflicts };
 }
 
@@ -172,27 +188,56 @@ export function mergeText(base: string, mine: string, theirs: string): { text: s
   return { text: result.lines.join("\n"), conflicts: result.conflicts };
 }
 
+/** Does `conflict`'s region, with its context, sit at line `i` of `lines`? */
+function regionAt(lines: readonly string[], i: number, conflict: MergeConflict): boolean {
+  const { before, mine, after } = conflict;
+  const from = i - before.length;
+  const end = i + mine.length;
+  if (from < 0 || end + after.length > lines.length) return false;
+  // Short context means the region touched the start or end of the text.
+  if (before.length < CONTEXT_LINES && from !== 0) return false;
+  if (after.length < CONTEXT_LINES && end + after.length !== lines.length) return false;
+  const expected = [...before, ...mine, ...after];
+  return expected.every((line, k) => lines[from + k] === line);
+}
+
 /**
- * Swap a reported conflict's `mine` lines for `theirs` in a text that still
- * contains them. Returns null when the user has since edited those lines.
+ * Where the region is now: where the merge put it, or else the one place its
+ * surrounding lines still match. -1 when it was edited or is ambiguous.
  */
-export function applyTheirs(text: string, conflict: MergeConflict): string | null {
-  const lines = splitLines(text);
-  const len = conflict.mine.length;
-  for (let i = 0; i + len <= lines.length; i++) {
-    let match = true;
-    for (let j = 0; j < len; j++) {
-      if (lines[i + j] !== conflict.mine[j]) {
-        match = false;
-        break;
-      }
-    }
-    if (match) {
-      lines.splice(i, len, ...conflict.theirs);
-      return lines.join("\n");
-    }
+function locate(lines: readonly string[], conflict: MergeConflict): number {
+  if (regionAt(lines, conflict.at, conflict)) return conflict.at;
+  let found = -1;
+  for (let i = 0; i <= lines.length; i++) {
+    if (!regionAt(lines, i, conflict)) continue;
+    if (found >= 0) return -1;
+    found = i;
   }
-  return null;
+  return found;
+}
+
+/**
+ * Swap reported conflicts' `mine` lines for `theirs`. Every region is located
+ * in the text first, then replaced bottom-up, so one replacement never moves
+ * or rewrites another's context. Returns null when the user has since edited
+ * any region or its context, or when a region can no longer be told apart.
+ */
+export function applyTheirs(text: string, conflicts: readonly MergeConflict[]): string | null {
+  const lines = splitLines(text);
+  const placed: { at: number; conflict: MergeConflict }[] = [];
+  for (const conflict of conflicts) {
+    const at = locate(lines, conflict);
+    if (at < 0) return null;
+    placed.push({ at, conflict });
+  }
+  placed.sort((a, b) => b.at - a.at);
+  for (let k = 1; k < placed.length; k++) {
+    const lower = placed[k - 1]!;
+    const upper = placed[k]!;
+    if (upper.at + upper.conflict.mine.length > lower.at) return null;
+  }
+  for (const { at, conflict } of placed) lines.splice(at, conflict.mine.length, ...conflict.theirs);
+  return lines.join("\n");
 }
 
 /**
