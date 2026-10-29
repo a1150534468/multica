@@ -96,7 +96,7 @@ export const TreeRow = forwardRef<HTMLAnchorElement, TreeRowProps>(function Tree
         // The toggle takes the icon's place on hover, so the label keeps the
         // row's width.
         <span className="relative flex size-4 shrink-0 items-center justify-center">
-          <span className="flex transition-opacity group-focus-within/row:opacity-0 group-hover/row:opacity-0 [@media(pointer:coarse)]:opacity-0">
+          <span className="flex group-hover/row:opacity-0 group-has-[:focus-visible]/row:opacity-0 [@media(pointer:coarse)]:opacity-0">
             {icon}
           </span>
           <button
@@ -110,7 +110,7 @@ export const TreeRow = forwardRef<HTMLAnchorElement, TreeRowProps>(function Tree
             onPointerEnter={onPrefetch}
             className={cn(
               TREE_ROW_BUTTON_CLASS,
-              "absolute text-muted-foreground opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100 [@media(pointer:coarse)]:opacity-100",
+              "absolute text-muted-foreground opacity-0 transition-none group-hover/row:opacity-100 group-has-[:focus-visible]/row:opacity-100 [@media(pointer:coarse)]:opacity-100",
             )}
           >
             <ChevronRight
