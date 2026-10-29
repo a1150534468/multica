@@ -43,7 +43,7 @@ function useVersionContent(wsId: string, docId: string, number: number, latest: 
 function WordDiff({ before, after }: { before: string; after: string }) {
   const ops = useMemo(() => diffWords(before, after), [before, after]);
   return (
-    <p className="whitespace-pre-wrap text-body leading-relaxed">
+    <p className="whitespace-pre-wrap text-body-lg leading-[1.7]">
       {ops.map((op, i) =>
         op.op === "eq" ? (
           <span key={i}>{op.value}</span>
@@ -271,7 +271,7 @@ function HistoryBody({ doc, versions, since }: { doc: Doc; versions: DocVersion[
             </Button>
           )}
         </div>
-        <div className="mx-auto w-full max-w-3xl px-6 py-6">
+        <div className="prose-document mx-auto w-full max-w-3xl px-6 py-6 sm:px-10">
           {ready ? (
             <BlockDiff changes={changes} html={doc.format === "html"} />
           ) : (

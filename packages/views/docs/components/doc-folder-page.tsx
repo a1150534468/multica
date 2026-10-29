@@ -71,7 +71,7 @@ function FolderTitle({ folder }: { folder: DocFolder }) {
           event.currentTarget.blur();
         }
       }}
-      className="w-full bg-transparent text-title-lg font-semibold text-foreground outline-none"
+      className="prose-document-title w-full bg-transparent text-foreground outline-none"
     />
   );
 }
@@ -182,9 +182,9 @@ export function DocFolderPage({ folderId }: { folderId: string }) {
         }
       />
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-3xl px-6 pt-10 pb-16">
+        <div className="mx-auto w-full max-w-3xl px-6 pt-12 pb-16 sm:px-10">
           <div className="mb-6 flex items-center gap-3">
-            <Folder className="size-6 shrink-0 text-muted-foreground" />
+            <Folder className="size-7 shrink-0 text-muted-foreground" />
             <FolderTitle folder={folder} />
           </div>
           <ul className="space-y-px">

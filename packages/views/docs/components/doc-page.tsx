@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -192,8 +192,13 @@ function DocEditor({ doc, actions, banner }: { doc: Doc; actions: React.ReactNod
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-3xl px-6 pt-10 pb-24">
-            <TitleInput value={draft.title} onChange={draft.setTitle} className="mb-4 text-title-lg" />
+          <div className="prose-document mx-auto w-full max-w-3xl px-6 pt-12 pb-24 sm:px-10">
+            <TitleInput
+              value={draft.title}
+              onChange={draft.setTitle}
+              onEnter={() => editorRef.current?.focus()}
+              className="prose-document-title mb-6"
+            />
             <ContentEditor
               ref={editorRef}
               defaultValue={doc.content}
@@ -211,25 +216,42 @@ function DocEditor({ doc, actions, banner }: { doc: Doc; actions: React.ReactNod
   );
 }
 
+/** Wraps instead of scrolling sideways; a title is one line, so Enter moves on. */
 function TitleInput({
   value,
   onChange,
+  onEnter,
   className,
 }: {
   value: string;
   onChange: (value: string) => void;
+  onEnter?: () => void;
   className?: string;
 }) {
   const { t } = useT("docs");
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
   return (
-    <input
+    <textarea
+      ref={ref}
+      rows={1}
       value={value}
       maxLength={300}
       aria-label={t(($) => $.editor.title_label)}
       placeholder={t(($) => $.untitled)}
-      onChange={(event) => onChange(event.target.value)}
+      onChange={(event) => onChange(event.target.value.replace(/\n/g, " "))}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+        event.preventDefault();
+        onEnter?.();
+      }}
       className={cn(
-        "w-full bg-transparent font-semibold text-foreground outline-none placeholder:text-faint-foreground",
+        "block w-full resize-none overflow-hidden bg-transparent font-semibold text-foreground outline-none placeholder:text-faint-foreground",
         className,
       )}
     />
@@ -355,8 +377,8 @@ export function DocDetailPage({ docId }: { docId: string }) {
           <Skeleton className="h-4 w-24" />
           <Skeleton className="h-4 w-40" />
         </div>
-        <div className="mx-auto w-full max-w-3xl space-y-3 px-6 pt-10">
-          <Skeleton className="h-8 w-2/3" />
+        <div className="mx-auto w-full max-w-3xl space-y-3 px-6 pt-12 sm:px-10">
+          <Skeleton className="mb-6 h-10 w-2/3" />
           <Skeleton className="h-4 w-full" />
           <Skeleton className="h-4 w-5/6" />
         </div>
@@ -437,7 +459,7 @@ export function DocDetailPage({ docId }: { docId: string }) {
         />
       </div>
       {panelOpen && (
-        <aside className="hidden w-72 shrink-0 border-l md:block">
+        <aside className="hidden w-80 shrink-0 border-l md:block">
           <DocSidePanel doc={doc} />
         </aside>
       )}
