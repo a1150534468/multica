@@ -193,18 +193,32 @@ beforeEach(() => {
 });
 
 describe("SkillDetailPage file selection", () => {
-  it("opens SKILL.md under the skill's properties, with no tabs", async () => {
+  it("opens SKILL.md beside the skill's properties, with no tabs", async () => {
     renderPage();
     expect(await screen.findByLabelText("Description")).toBeTruthy();
     expect(screen.getByTestId("preview").textContent).toContain("# Interface Animations");
     expect(screen.queryByRole("tab")).toBeNull();
   });
 
-  it("opens the file named in ?file= on its own", async () => {
+  it("opens the file named in ?file=, keeping the skill's properties beside it", async () => {
     renderPage(new URLSearchParams("file=patterns.md"));
     expect((await screen.findByTestId("preview")).textContent).toContain("# Patterns");
     expect(screen.getByText("Reference file of aiforui-animations")).toBeTruthy();
+    expect(screen.getByLabelText("Description")).toBeTruthy();
+  });
+
+  it("folds the properties panel away and back from the header", async () => {
+    renderPage();
+    await screen.findByLabelText("Description");
+    const toggle = screen.getByRole("button", { name: "Details" });
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+
+    fireEvent.click(toggle);
     expect(screen.queryByLabelText("Description")).toBeNull();
+    expect(screen.getByTestId("preview")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Details" }));
+    expect(screen.getByLabelText("Description")).toBeTruthy();
   });
 
   it("falls back to SKILL.md when ?file= names no file", async () => {
@@ -484,14 +498,12 @@ describe("SkillDetailPage rail", () => {
     expect(banner).toBeTruthy();
   });
 
-  it("puts the identity strip and the file toolbar on that same rail", async () => {
+  it("puts the file toolbar on that same rail", async () => {
     renderPage();
     await screen.findByLabelText("Description");
 
-    const railed = document.body.querySelectorAll(
-      `.${RAIL_SENTINEL}.${GUTTER_SENTINEL}`,
-    );
-    // Identity strip, the properties and the file toolbar at minimum.
-    expect(railed.length).toBeGreaterThanOrEqual(3);
+    const toolbar = screen.getByText("SKILL.md", { selector: "span.font-mono" }).closest("div");
+    expect(toolbar?.className).toContain(RAIL_SENTINEL);
+    expect(toolbar?.className).toContain(GUTTER_SENTINEL);
   });
 });

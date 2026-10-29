@@ -128,6 +128,7 @@
     "read_only": "Lecture seule",
     "delete_aria": "Supprimer le skill",
     "delete_tooltip": "Supprimer le skill",
+    "toggle_panel": "Détails",
     "supporting_data_warning": "Certaines données de l'espace de travail n'ont pas pu être chargées. L'attribution des créateurs, les noms de runtimes ou les droits de modification peuvent apparaître incomplets jusqu'à la prochaine actualisation.",
     "delete_file": "Supprimer le fichier",
     "name_placeholder": "nom-du-skill",
@@ -206,8 +207,6 @@
     "header": {
       "files_one": "{{count}} fichier",
       "files_other": "{{count}} fichiers",
-      "used_by_one": "{{count}} agent",
-      "used_by_other": "{{count}} agents",
       "updated": "Mis à jour {{when}}",
       "updated_by": "Mis à jour {{when}} par {{name}}"
     },
@@ -224,7 +223,6 @@
       "permissions_owner": "Vous pouvez modifier et supprimer ce skill. Les changements prennent effet à la prochaine exécution d'agent.",
       "permissions_locked_creator": "Seuls le créateur ({{name}}) ou un administrateur de l'espace de travail peuvent modifier ce skill.",
       "permissions_locked": "Seuls le créateur ou un administrateur de l'espace de travail peuvent modifier ce skill.",
-      "properties_help": "À propos des propriétés du skill",
       "character_count": "{{count}} caractères"
     },
     "files": {
