@@ -1651,14 +1651,14 @@ export function IssueDisplayControls({
   onTableFacetChange,
   viewBaseline,
   hideFilter = false,
-  compact = false,
+  iconOnly = false,
 }: {
   scopedIssues: Issue[];
   hideViewToggle?: boolean;
   /** The host renders its own filter trigger (the view header's chip row). */
   hideFilter?: boolean;
-  /** Icon-only controls, for a header that has run out of room. */
-  compact?: boolean;
+  /** A ghost icon button named only by its tooltip, for the issue view header. */
+  iconOnly?: boolean;
   dateFilter?: IssueDateFilter | null;
   onDateFilterChange?: (filter: IssueDateFilter | null) => void;
   /** Open saved view: menu marks the view's values checked-and-disabled;
@@ -1842,7 +1842,7 @@ export function IssueDisplayControls({
   const hasLayoutOptions =
     showColumnToggles || viewMode === "table" || availableCardPropertyOptions.length > 0;
   const controlButtonClass = "h-8 w-8 gap-1 px-0 text-muted-foreground md:h-7 md:w-auto md:px-2.5";
-  const controlLabelClass = compact ? "sr-only" : "hidden md:inline @max-3xl/issue-header:hidden";
+  const controlLabelClass = "hidden md:inline @max-3xl/issue-header:hidden";
 
   return (
     <div className="flex shrink-0 items-center gap-1">
@@ -1884,16 +1884,27 @@ export function IssueDisplayControls({
               render={
                 <TooltipTrigger
                   render={
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className={controlButtonClass}
-                      aria-label={t(($) => $.display.button)}
-                    >
-                      <LayoutIcon className="size-3.5" />
-                      <span className={controlLabelClass}>{t(($) => $.display.button)}</span>
-                      <ChevronDown className={cn("size-3 text-muted-foreground", controlLabelClass)} />
-                    </Button>
+                    iconOnly ? (
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="text-muted-foreground"
+                        aria-label={t(($) => $.display.button)}
+                      >
+                        <LayoutIcon />
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className={controlButtonClass}
+                        aria-label={t(($) => $.display.button)}
+                      >
+                        <LayoutIcon className="size-3.5" />
+                        <span className={controlLabelClass}>{t(($) => $.display.button)}</span>
+                        <ChevronDown className={cn("size-3 text-muted-foreground", controlLabelClass)} />
+                      </Button>
+                    )
                   }
                 />
               }

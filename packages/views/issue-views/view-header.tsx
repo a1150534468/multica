@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useStore } from "zustand";
 import { toast } from "sonner";
 import {
@@ -15,7 +15,7 @@ import {
   ListTodo,
   Lock,
   Pencil,
-  Plus,
+  SquarePen,
   Star,
   EyeOff,
   Filter,
@@ -23,6 +23,7 @@ import {
   Users,
 } from "@multica/ui/icons";
 import { Button } from "@multica/ui/components/ui/button";
+import { IconButton } from "@multica/ui/components/common/icon-button";
 import { Separator } from "@multica/ui/components/ui/separator";
 import {
   DropdownMenu,
@@ -70,6 +71,7 @@ import { useViewStore, useViewStoreApi } from "@multica/core/issues/stores/view-
 import type { Project } from "@multica/core/types";
 import { PageHeader } from "../layout/page-header";
 import { RefreshablePageIcon } from "../layout/refreshable-page-icon";
+import { ActionShortcutKeycaps } from "../common/shortcut-keycaps";
 import { ProjectIcon } from "../projects/components/project-icon";
 import { IssueDisplayControls, IssueFilterMenu } from "../issues/components/issues-header";
 import { useFilterChips } from "../issues/components/filter-chips-bar";
@@ -77,7 +79,6 @@ import { WorkspaceAgentWorkingChip } from "../issues/components/workspace-agent-
 import type { IssueSurfaceController } from "../issues/surface/use-issue-surface-controller";
 import { useT } from "../i18n";
 import { DeleteViewDialog } from "./delete-view-dialog";
-import { useCrowdedLevel } from "./use-crowded";
 import { useIssueViewActions } from "./use-view-actions";
 import { ViewNameInput } from "./view-name-input";
 
@@ -103,23 +104,21 @@ function viewScopeOf(base: IssueViewHeaderBase): IssueViewScope {
 }
 
 /**
- * One row for every issue list page: the view's name and its menu, the
- * filters as chips, then Reset / Save once they drift from what the view
- * saves, and the display controls on the right.
+ * One row for every issue list page. The left side says what is being looked
+ * at: the view's name and its menu, the filter, then Reset / Save once they
+ * drift from what the view saves. The right side holds icon-only controls
+ * whose names live in their tooltips, so the title is the row's only text.
  */
 export function IssueViewHeader({
   controller,
   base,
   baseMenu,
-  context,
   trailing,
 }: {
   controller: IssueSurfaceController;
   base: IssueViewHeaderBase;
   /** Name-menu items for the page itself, e.g. project actions. */
   baseMenu?: ReactNode;
-  /** Page settings shown beside the title, e.g. the project's workflow. */
-  context?: ReactNode;
   /** Layout toggles at the far end, e.g. the project's properties panel. */
   trailing?: ReactNode;
 }) {
@@ -275,36 +274,32 @@ export function IssueViewHeader({
 
   const { chips: filterChips } = useFilterChips(dateFilter, setDateFilter);
   const filterCount = filterChips.length + (scopeCounts ? 1 : 0);
-  const viewMode = useViewStore((s) => s.viewMode);
-  const zoneRef = useRef<HTMLDivElement>(null);
-  // Step 1 folds the display controls to icons, step 2 the agents chip and
-  // New issue as well; the title only truncates after both.
-  const crowding = useCrowdedLevel(
-    zoneRef,
-    2,
-    [
-      activeView?.name ?? baseName,
-      renaming,
-      dirty,
-      filterCount > 0,
-      viewMode,
-      agentRunningFilter,
-      controller.workingAgents?.length ?? -1,
-    ].join("|"),
-  );
+  // The trigger is an icon, so the tooltip is where the reader learns what
+  // the count is made of without opening the menu.
+  const filterFields = [
+    ...(scopeCounts ? [t(($) => $.save_view.scope_label_workspace)] : []),
+    ...filterChips.map((chip) => chip.label),
+  ];
+  const filterTooltip =
+    filterFields.length > 0
+      ? `${t(($) => $.views.filter)} · ${filterFields.join(t(($) => $.workflows.list_separator))}`
+      : t(($) => $.views.filter);
+  // An idle surface has nothing to report, so the chip only takes room while
+  // someone is working or its filter is on.
+  const showAgentsChip = agentRunningFilter || (controller.workingAgents?.length ?? 0) > 0;
 
   const title = (
     <>
       <RefreshablePageIcon refreshing={controller.isRefreshing}>
         {activeView ? <Layers className="size-4" /> : baseIcon}
       </RefreshablePageIcon>
-      <span data-fit-truncate className="min-w-0 truncate">{activeView ? activeView.name : baseName}</span>
+      <span className="min-w-0 truncate">{activeView ? activeView.name : baseName}</span>
     </>
   );
 
   return (
     <PageHeader className="@container/issue-header">
-      <div ref={zoneRef} className="flex min-w-0 flex-1 items-center gap-2 overflow-x-clip">
+      <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-clip">
         {renaming && activeView ? (
           <span className="flex min-w-0 shrink-0 items-center gap-2">
             <Layers className="size-4 shrink-0 text-muted-foreground" />
@@ -413,16 +408,15 @@ export function IssueViewHeader({
           </DropdownMenu>
         )}
 
-        {context}
-
         <IssueFilterMenu
           align="start"
+          tooltip={filterTooltip}
           trigger={
             <Button
               variant="ghost"
               size="sm"
               className={cn(
-                "h-7 shrink-0 gap-1.5 px-2 text-muted-foreground",
+                "h-7 min-w-7 shrink-0 gap-1.5 px-1.5 text-muted-foreground",
                 filterCount > 0 && "text-foreground",
               )}
               aria-label={
@@ -431,8 +425,7 @@ export function IssueViewHeader({
                   : t(($) => $.views.filter)
               }
             >
-              <Filter className="size-3.5" />
-              <span className="@max-md/issue-header:hidden">{t(($) => $.views.filter)}</span>
+              <Filter className="size-4" />
               {filterCount > 0 && (
                 <span className="rounded-sm bg-brand/10 px-1 text-caption font-medium tabular-nums text-brand">
                   {filterCount}
@@ -471,17 +464,14 @@ export function IssueViewHeader({
       </div>
 
       <div className="flex shrink-0 items-center gap-1">
-        {agentRunningFilter && crowding === 0 && (
-          <span className="mr-1 hidden text-caption text-muted-foreground lg:inline">
-            {t(($) => $.agent_activity.filter_active_label)}
-          </span>
+        {showAgentsChip && (
+          <WorkspaceAgentWorkingChip
+            value={agentRunningFilter}
+            onToggle={toggleAgentRunningFilter}
+            agents={controller.workingAgents}
+            compact
+          />
         )}
-        <WorkspaceAgentWorkingChip
-          value={agentRunningFilter}
-          onToggle={toggleAgentRunningFilter}
-          agents={controller.workingAgents}
-          compact={crowding >= 2}
-        />
         <IssueDisplayControls
           hideFilter
           scopedIssues={controller.surfaceIssues}
@@ -489,20 +479,17 @@ export function IssueViewHeader({
           facetCountsExact={controller.facetCountsExact}
           tableFacetCounts={controller.tableFacetCounts}
           onTableFacetChange={controller.setActiveTableFacet}
-          compact={crowding >= 1}
+          iconOnly
         />
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 w-8 gap-1 px-0 md:h-7 md:w-auto md:px-2.5"
-          aria-label={t(($) => $.views.new_issue)}
+        <IconButton
+          label={t(($) => $.views.new_issue)}
+          shortcut={<ActionShortcutKeycaps action="createIssue" />}
+          tooltipSide="bottom"
+          className="text-muted-foreground"
           onClick={() => controller.openCreateIssue()}
         >
-          <Plus aria-hidden="true" className="size-3.5" />
-          {crowding < 2 && (
-            <span className="hidden md:inline @max-3xl/issue-header:hidden">{t(($) => $.views.new_issue)}</span>
-          )}
-        </Button>
+          <SquarePen />
+        </IconButton>
         {trailing && (
           <>
             <Separator orientation="vertical" className="ml-1 data-vertical:h-4 data-vertical:self-center" />

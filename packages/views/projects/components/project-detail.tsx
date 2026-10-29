@@ -30,7 +30,7 @@ import { ProjectResourcesSection } from "./project-resources-section";
 import { ProjectStartDatePicker } from "./project-start-date-picker";
 import { ProjectDueDatePicker } from "./project-due-date-picker";
 import { ProjectWorkflowControl } from "../../workflows/project-workflow-row";
-import { ProjectWorkflowMenu } from "../../workflows/project-workflow-menu";
+import { ProjectWorkflowMenuHost } from "../../workflows/project-workflow-menu";
 import { IssueSurface } from "../../issues/surface/issue-surface";
 import { Skeleton } from "@multica/ui/components/ui/skeleton";
 import { Button } from "@multica/ui/components/ui/button";
@@ -498,63 +498,72 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
             scope={issueScope}
             modes={["board", "list", "table", "swimlane", "gantt"]}
             renderHeader={({ controller }) => (
-              <IssueViewHeader
-                controller={controller}
-                base={{ kind: "project", project }}
-                baseMenu={
-                  <>
-                    <DropdownMenuItem onClick={() => {
-                      void copyText(router.getShareableUrl(currentPath(router))).then((ok) => {
-                        if (ok) toast.success(t(($) => $.detail.toast_link_copied));
-                      });
-                    }}>
-                      <Link2 className="h-3.5 w-3.5" />
-                      {t(($) => $.detail.copy_link)}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => {
-                      if (isPinned) {
-                        deletePinMut.mutate({ itemType: "project", itemId: projectId });
-                      } else {
-                        createPin.mutate({ item_type: "project", item_id: projectId });
-                      }
-                    }}>
-                      {isPinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
-                      {isPinned ? t(($) => $.detail.unpin_tooltip) : t(($) => $.detail.pin_tooltip)}
-                    </DropdownMenuItem>
-                    {isWorkspaceAdmin && (
+              <ProjectWorkflowMenuHost project={project}>
+                {(workflowSubmenu) => (
+                  <IssueViewHeader
+                    controller={controller}
+                    base={{ kind: "project", project }}
+                    baseMenu={
                       <>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          variant="destructive"
-                          onClick={() => setDeleteDialogOpen(true)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                          {t(($) => $.detail.delete_action)}
+                        <DropdownMenuItem onClick={() => {
+                          void copyText(router.getShareableUrl(currentPath(router))).then((ok) => {
+                            if (ok) toast.success(t(($) => $.detail.toast_link_copied));
+                          });
+                        }}>
+                          <Link2 className="h-3.5 w-3.5" />
+                          {t(($) => $.detail.copy_link)}
                         </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => {
+                          if (isPinned) {
+                            deletePinMut.mutate({ itemType: "project", itemId: projectId });
+                          } else {
+                            createPin.mutate({ item_type: "project", item_id: projectId });
+                          }
+                        }}>
+                          {isPinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
+                          {isPinned ? t(($) => $.detail.unpin_tooltip) : t(($) => $.detail.pin_tooltip)}
+                        </DropdownMenuItem>
+                        {workflowSubmenu && (
+                          <>
+                            <DropdownMenuSeparator />
+                            {workflowSubmenu}
+                          </>
+                        )}
+                        {isWorkspaceAdmin && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onClick={() => setDeleteDialogOpen(true)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              {t(($) => $.detail.delete_action)}
+                            </DropdownMenuItem>
+                          </>
+                        )}
                       </>
-                    )}
-                  </>
-                }
-                context={<ProjectWorkflowMenu project={project} />}
-                trailing={
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <Button
-                          variant={sidebarOpen ? "secondary" : "ghost"}
-                          size="icon-sm"
-                          className={sidebarOpen ? "" : "text-muted-foreground"}
-                          aria-label={t(($) => $.detail.sidebar_tooltip)}
-                          onClick={handleToggleSidebar}
-                        >
-                          <PanelRight />
-                        </Button>
-                      }
-                    />
-                    <TooltipContent side="bottom">{t(($) => $.detail.sidebar_tooltip)}</TooltipContent>
-                  </Tooltip>
-                }
-              />
+                    }
+                    trailing={
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={
+                            <Button
+                              variant={sidebarOpen ? "secondary" : "ghost"}
+                              size="icon-sm"
+                              className={sidebarOpen ? "" : "text-muted-foreground"}
+                              aria-label={t(($) => $.detail.sidebar_tooltip)}
+                              onClick={handleToggleSidebar}
+                            >
+                              <PanelRight />
+                            </Button>
+                          }
+                        />
+                        <TooltipContent side="bottom">{t(($) => $.detail.sidebar_tooltip)}</TooltipContent>
+                      </Tooltip>
+                    }
+                  />
+                )}
+              </ProjectWorkflowMenuHost>
             )}
           />
           </div>
