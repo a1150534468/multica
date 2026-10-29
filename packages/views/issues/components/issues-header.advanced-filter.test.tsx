@@ -6,7 +6,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createStore, type StoreApi } from "zustand/vanilla";
@@ -128,7 +128,7 @@ describe("IssueFilterMenu advanced mode", () => {
     expect(screen.getByRole("button", { name: "Clear all" })).toBeDisabled();
   });
 
-  it("edits a property condition with the property's own values", async () => {
+  it("edits a number property with a typed value and its own operators", async () => {
     const store = renderFilterMenu(
       (s) =>
         s.getState().setAdvancedFilter(
@@ -138,15 +138,92 @@ describe("IssueFilterMenu advanced mode", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Filter" }));
     await screen.findByTestId("advanced-filter-panel");
-    const values = await screen.findByRole("button", { name: "Values" });
-    await waitFor(() => expect(values).toBeEnabled());
-    fireEvent.click(values);
-    fireEvent.click(await screen.findByRole("menuitemcheckbox", { name: /No value/ }));
+    const input = await screen.findByRole("spinbutton", { name: "Values" });
+    fireEvent.change(input, { target: { value: "3" } });
+    fireEvent.keyDown(input, { key: "Enter" });
     expect(store.getState().advancedFilter?.children).toMatchObject([
-      { field: "property:estimate", values: ["__none__"] },
+      { field: "property:estimate", negated: false, values: ["3"] },
     ]);
-    // A plain "is" property condition is still a simple filter.
+
+    await userEvent.click(screen.getByRole("combobox", { name: "Match" }));
+    await userEvent.click(await screen.findByRole("option", { name: ">" }));
+    expect(store.getState().advancedFilter?.children).toMatchObject([
+      { values: [{ op: "gt", value: "3" }] },
+    ]);
+
+    await userEvent.click(screen.getByRole("combobox", { name: "Match" }));
+    await userEvent.click(await screen.findByRole("option", { name: "is empty" }));
+    expect(store.getState().advancedFilter?.children).toMatchObject([{ values: ["__none__"] }]);
+    expect(screen.queryByRole("spinbutton", { name: "Values" })).not.toBeInTheDocument();
+    // A plain "is empty" property condition is still a simple filter.
     expect(screen.getByRole("button", { name: "Switch to simple filter" })).toBeEnabled();
+  });
+
+  it("lists actor values under their headings", async () => {
+    const store = renderFilterMenu((s) =>
+      s.getState().setAdvancedFilter(createFilterGroup("all", [createFilterCondition("assignee", [])])),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Filter" }));
+    await screen.findByTestId("advanced-filter-panel");
+    fireEvent.click(screen.getByRole("button", { name: "Values" }));
+    expect(await screen.findByText("Agents")).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("menuitemcheckbox", { name: /Lambda/ }));
+    expect(store.getState().advancedFilter?.children).toMatchObject([{ values: ["agent:agent-lambda"] }]);
+  });
+
+  it("names set operators for labels", async () => {
+    renderFilterMenu((s) =>
+      s.getState().setAdvancedFilter(createFilterGroup("all", [createFilterCondition("label", ["label-bug"])])),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Filter" }));
+    await screen.findByTestId("advanced-filter-panel");
+    expect(screen.getByRole("combobox", { name: "Match" })).toHaveTextContent("includes any of");
+  });
+
+  it("adds an empty group and opens its add menu", async () => {
+    const store = renderFilterMenu((s) =>
+      s.getState().setAdvancedFilter(createFilterGroup("all", [createFilterCondition("status", ["todo"])])),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Filter" }));
+    await screen.findByTestId("advanced-filter-panel");
+    fireEvent.click(screen.getByRole("button", { name: "Add condition group" }));
+
+    expect(store.getState().advancedFilter?.children[1]).toMatchObject({ type: "group", match: "any", children: [] });
+    expect(screen.getByTestId("advanced-filter-group")).toHaveTextContent(/joined with “or”/);
+    expect(await screen.findByText("Add to group")).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Priority/ }));
+    expect(store.getState().advancedFilter?.children[1]).toMatchObject({
+      type: "group",
+      children: [{ field: "priority", values: [] }],
+    });
+  });
+
+  it("turns a row into a group and reads the tree as a sentence", async () => {
+    const store = renderFilterMenu((s) =>
+      s.getState().setAdvancedFilter(
+        createFilterGroup("all", [
+          createFilterCondition("label", ["label-bug"]),
+          createFilterCondition("priority", ["urgent"]),
+        ]),
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Filter" }));
+    await screen.findByTestId("advanced-filter-panel");
+    expect(screen.queryByTestId("advanced-filter-summary")).not.toBeInTheDocument();
+
+    const rows = screen.getAllByTestId("advanced-filter-row");
+    fireEvent.click(within(rows[1]!).getByRole("button", { name: "Condition actions" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Turn into group" }));
+    expect(store.getState().advancedFilter?.children[1]).toMatchObject({
+      type: "group",
+      match: "any",
+      children: [{ field: "priority", values: ["urgent"] }],
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("advanced-filter-summary")).toHaveTextContent(
+        "Shows issues where Label includes any of Bug and Priority is Urgent",
+      ),
+    );
   });
 
   it("switches to advanced with the current filters and opens the panel", async () => {

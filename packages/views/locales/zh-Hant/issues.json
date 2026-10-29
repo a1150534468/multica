@@ -238,7 +238,21 @@
     "advanced_to_simple_blocked": "含條件組、「任一」或重複欄位，簡單篩選無法表達",
     "advanced_clear": "清除全部",
     "advanced_empty": "還沒有條件，新增一條開始篩選。",
-    "advanced_conditions_other": "{{count}} 個條件"
+    "advanced_conditions_other": "{{count}} 個條件",
+    "operator_has_any": "包含任一",
+    "operator_has_none": "都不包含",
+    "operator_contains": "包含",
+    "operator_not_contains": "不包含",
+    "operator_before": "早於",
+    "operator_after": "晚於",
+    "operator_empty": "為空",
+    "operator_not_empty": "不為空",
+    "advanced_group_match_leading": "滿足組內",
+    "advanced_group_match_trailing": "條件",
+    "advanced_group_hint": "組內條件之間用「{{word}}」連接",
+    "advanced_add_to_group": "新增到條件組",
+    "advanced_turn_into_group": "轉為條件組",
+    "advanced_summary": "篩選：{{summary}}"
   },
   "display": {
     "tooltip": "顯示設定",

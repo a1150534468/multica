@@ -244,7 +244,21 @@
     "advanced_clear": "Tout effacer",
     "advanced_empty": "Aucune condition. Ajoutez-en une pour filtrer.",
     "advanced_conditions_one": "{{count}} condition",
-    "advanced_conditions_other": "{{count}} conditions"
+    "advanced_conditions_other": "{{count}} conditions",
+    "operator_has_any": "contient l'un de",
+    "operator_has_none": "ne contient aucun de",
+    "operator_contains": "contient",
+    "operator_not_contains": "ne contient pas",
+    "operator_before": "est avant",
+    "operator_after": "est après",
+    "operator_empty": "est vide",
+    "operator_not_empty": "n'est pas vide",
+    "advanced_group_match_leading": "Correspond à",
+    "advanced_group_match_trailing": "de ces conditions",
+    "advanced_group_hint": "Les conditions de ce groupe sont reliées par « {{word}} »",
+    "advanced_add_to_group": "Ajouter au groupe",
+    "advanced_turn_into_group": "Transformer en groupe",
+    "advanced_summary": "Affiche les tâches où {{summary}}"
   },
   "display": {
     "tooltip": "Paramètres d'affichage",

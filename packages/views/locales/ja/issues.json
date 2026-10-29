@@ -238,7 +238,21 @@
     "advanced_to_simple_blocked": "グループ、「いずれか」、同じフィールドの重複はシンプルフィルターで表現できません",
     "advanced_clear": "すべてクリア",
     "advanced_empty": "条件はまだありません。条件を追加して絞り込みます。",
-    "advanced_conditions_other": "{{count}} 件の条件"
+    "advanced_conditions_other": "{{count}} 件の条件",
+    "operator_has_any": "いずれかを含む",
+    "operator_has_none": "いずれも含まない",
+    "operator_contains": "を含む",
+    "operator_not_contains": "を含まない",
+    "operator_before": "より前",
+    "operator_after": "より後",
+    "operator_empty": "空",
+    "operator_not_empty": "空ではない",
+    "advanced_group_match_leading": "このグループの",
+    "advanced_group_match_trailing": "に一致",
+    "advanced_group_hint": "このグループの条件は「{{word}}」でつながります",
+    "advanced_add_to_group": "グループに追加",
+    "advanced_turn_into_group": "グループに変換",
+    "advanced_summary": "条件：{{summary}}"
   },
   "display": {
     "tooltip": "表示設定",

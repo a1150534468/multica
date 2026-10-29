@@ -238,7 +238,21 @@
     "advanced_to_simple_blocked": "그룹, '하나 이상', 같은 필드의 중복 사용은 간단 필터로 표현할 수 없습니다",
     "advanced_clear": "모두 지우기",
     "advanced_empty": "아직 조건이 없습니다. 조건을 추가해 필터링하세요.",
-    "advanced_conditions_other": "조건 {{count}}개"
+    "advanced_conditions_other": "조건 {{count}}개",
+    "operator_has_any": "다음 중 하나 포함",
+    "operator_has_none": "모두 미포함",
+    "operator_contains": "포함",
+    "operator_not_contains": "미포함",
+    "operator_before": "이전",
+    "operator_after": "이후",
+    "operator_empty": "비어 있음",
+    "operator_not_empty": "비어 있지 않음",
+    "advanced_group_match_leading": "이 그룹 조건",
+    "advanced_group_match_trailing": "충족",
+    "advanced_group_hint": "이 그룹의 조건은 '{{word}}'(으)로 연결됩니다",
+    "advanced_add_to_group": "그룹에 추가",
+    "advanced_turn_into_group": "그룹으로 전환",
+    "advanced_summary": "조건: {{summary}}"
   },
   "display": {
     "tooltip": "보기 설정",

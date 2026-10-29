@@ -1,14 +1,16 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, Ellipsis, ListTree, Plus, SlidersHorizontal } from "@multica/ui/icons";
 import { Button } from "@multica/ui/components/ui/button";
+import { Input } from "@multica/ui/components/ui/input";
 import { cn } from "@multica/ui/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -31,6 +33,7 @@ import {
   isPropertyCondition,
   propertyFilterField,
   propertyIdOfField,
+  pruneAdvancedFilter,
   simpleFromAdvancedFilter,
   type AdvancedFilterCondition,
   type AdvancedFilterField,
@@ -40,6 +43,18 @@ import {
   type NegatableFilterDimension,
   type PropertyFilterCondition,
 } from "@multica/core/issues/stores/filter-tree";
+import {
+  conditionOperator,
+  conditionText,
+  filterFieldSpec,
+  filterOperatorsFor,
+  isEmptinessOperator,
+  isTypedValueKind,
+  withConditionOperator,
+  withConditionText,
+  type FilterFieldKind,
+  type FilterOperator,
+} from "@multica/core/issues/stores/filter-operators";
 import { useViewStore } from "@multica/core/issues/stores/view-store-context";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { propertyListOptions } from "@multica/core/properties";
@@ -47,6 +62,7 @@ import { memberListOptions } from "@multica/core/workspace/queries";
 import {
   isActorPropertyType,
   isFilterablePropertyType,
+  PROPERTY_FILTER_OP_SYMBOLS,
   propertyFilterValueKey,
   type IssueProperty,
   type PropertyFilterValue,
@@ -135,10 +151,17 @@ function useConditionFields(fields: readonly NegatableFilterDimension[]): Condit
 function FieldPickerMenu({
   fields,
   trigger,
+  heading,
+  defaultOpen,
+  onOpenChange,
   onPick,
 }: {
   fields: ConditionFields;
   trigger: React.ReactElement;
+  heading?: string;
+  /** Open as soon as it mounts: the menu of a group just created. */
+  defaultOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
   onPick: (field: AdvancedFilterField) => void;
 }) {
   const item = (option: FieldOption) => (
@@ -148,9 +171,14 @@ function FieldPickerMenu({
     </DropdownMenuItem>
   );
   return (
-    <DropdownMenu>
+    <DropdownMenu defaultOpen={defaultOpen} onOpenChange={(open) => onOpenChange?.(open)}>
       <DropdownMenuTrigger render={trigger} />
       <DropdownMenuContent align="start" className="w-52">
+        {heading && (
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>{heading}</DropdownMenuLabel>
+          </DropdownMenuGroup>
+        )}
         {fields.builtIn.map(item)}
         {fields.properties.length > 0 && <DropdownMenuSeparator />}
         {fields.properties.map(item)}
@@ -195,53 +223,89 @@ function MatchSelect({
   );
 }
 
-/** "Where" before the first row, then the group's word for joining rows; the
- *  second row of a nested group is where that word is chosen. */
-function RowConnector({
-  index,
-  group,
-  editable,
-  onMatchChange,
-}: {
-  index: number;
-  group: AdvancedFilterGroup;
-  editable: boolean;
-  onMatchChange: (match: "all" | "any") => void;
-}) {
+function useJoinWord() {
   const { t } = useT("issues");
-  if (index === 0) return <span className={CONNECTOR_CLASS}>{t(($) => $.filters.advanced_where)}</span>;
-  if (index === 1 && editable) {
-    const items = [
-      { value: "all", label: t(($) => $.filters.advanced_and) },
-      { value: "any", label: t(($) => $.filters.advanced_or) },
-    ];
-    return (
-      <span className={CONNECTOR_CLASS}>
-        <Select
-          items={items}
-          value={group.match}
-          onValueChange={(next) => {
-            if (next === "all" || next === "any") onMatchChange(next);
-          }}
-        >
-          <SelectTrigger size="sm" aria-label={t(($) => $.filters.operator_label)} className={cn(ROW_SELECT_CLASS, "w-13 px-1.5")}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent alignItemWithTrigger={false} align="start">
-            {items.map((item) => (
-              <SelectItem key={item.value} value={item.value} className="text-caption">
-                {item.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </span>
-    );
-  }
+  return (match: "all" | "any") =>
+    match === "any" ? t(($) => $.filters.advanced_or) : t(($) => $.filters.advanced_and);
+}
+
+/** "Where" before the first row, then the word the group's match joins rows
+ *  with. The word is chosen in the group's header, not on a row. */
+function RowConnector({ index, match }: { index: number; match: "all" | "any" }) {
+  const { t } = useT("issues");
+  const joinWord = useJoinWord();
   return (
     <span className={CONNECTOR_CLASS}>
-      {group.match === "any" ? t(($) => $.filters.advanced_or) : t(($) => $.filters.advanced_and)}
+      {index === 0 ? t(($) => $.filters.advanced_where) : joinWord(match)}
     </span>
+  );
+}
+
+function useOperatorLabel() {
+  const { t } = useT("issues");
+  return (op: FilterOperator, kind: FilterFieldKind): string => {
+    const set = kind === "multi" || kind === "list";
+    switch (op) {
+      case "is":
+        if (kind === "number") return "=";
+        return set ? t(($) => $.filters.operator_has_any) : t(($) => $.filters.operator_is);
+      case "is_not":
+        if (kind === "number") return "≠";
+        return set ? t(($) => $.filters.operator_has_none) : t(($) => $.filters.operator_is_not);
+      case "contains":
+        return t(($) => $.filters.operator_contains);
+      case "not_contains":
+        return t(($) => $.filters.operator_not_contains);
+      case "before":
+        return t(($) => $.filters.operator_before);
+      case "after":
+        return t(($) => $.filters.operator_after);
+      case "is_empty":
+        return t(($) => $.filters.operator_empty);
+      case "is_not_empty":
+        return t(($) => $.filters.operator_not_empty);
+      default:
+        return PROPERTY_FILTER_OP_SYMBOLS[op] ?? op;
+    }
+  };
+}
+
+/** A typed value (text, number, date, list element), committed on Enter or
+ *  blur so each keystroke doesn't refetch. */
+function TypedValueInput({
+  kind,
+  value,
+  onCommit,
+}: {
+  kind: FilterFieldKind;
+  value: string;
+  onCommit: (text: string) => void;
+}) {
+  const { t } = useT("issues");
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  const commit = () => {
+    if (draft.trim() !== value) onCommit(draft);
+  };
+  return (
+    <Input
+      type={kind === "number" ? "number" : kind === "date" ? "date" : "text"}
+      step={kind === "number" ? "any" : undefined}
+      inputMode={kind === "number" ? "decimal" : undefined}
+      aria-label={t(($) => $.filters.advanced_values_label)}
+      placeholder={
+        kind === "number"
+          ? t(($) => $.pickers.custom_property.number_placeholder)
+          : t(($) => $.pickers.custom_property.value_placeholder)
+      }
+      value={draft}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") commit();
+      }}
+      className="h-7 min-w-0 flex-1 rounded-md px-2 text-caption md:text-caption"
+    />
   );
 }
 
@@ -318,7 +382,11 @@ function ValuePicker({
             lastGroup = option.group;
             return (
               <div key={option.value}>
-                {heading && <DropdownMenuLabel>{heading}</DropdownMenuLabel>}
+                {heading && (
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>{heading}</DropdownMenuLabel>
+                  </DropdownMenuGroup>
+                )}
                 <DropdownMenuCheckboxItem
                   checked={checked}
                   onCheckedChange={() => toggle(option.value)}
@@ -432,24 +500,47 @@ function ConditionRow({
   catalog,
   canAdd,
   onEdit,
+  onTurnIntoGroup,
 }: {
   condition: AdvancedFilterCondition;
   fields: ConditionFields;
   catalog: Catalog;
   canAdd: boolean;
   onEdit: (edit: (node: AdvancedFilterNode) => AdvancedFilterNode[]) => void;
+  /** Only rows directly under the root can become a group. */
+  onTurnIntoGroup?: () => void;
 }) {
   const { t } = useT("issues");
+  const operatorLabel = useOperatorLabel();
   const current = fields.describe(condition.field);
   // A stored condition on a field this surface hides (or a deleted property)
   // still renders, so it can be seen and removed.
   const known = [...fields.builtIn, ...fields.properties].some((o) => o.field === condition.field);
   const fieldItems = [...fields.builtIn, ...fields.properties, ...(known ? [] : [current])];
-  const operatorItems = [
-    { value: "is", label: t(($) => $.filters.operator_is) },
-    { value: "is_not", label: t(($) => $.filters.operator_is_not) },
-  ];
+  const property = isPropertyCondition(condition)
+    ? fields.propertyById.get(propertyIdOfField(condition.field) ?? "")
+    : undefined;
+  const spec = filterFieldSpec(condition, property?.type);
+  // The operator the row last showed. An operator stored in the values
+  // ("contains", "> 3") is lost while the value is empty, and picking only
+  // "No value" under "is" reads back as "is empty"; either way the row keeps
+  // what the user chose instead of swapping its editor mid-edit.
+  const [pendingOp, setPendingOp] = useState<FilterOperator | null>(null);
+  const derived = conditionOperator(condition, spec);
+  const operator =
+    pendingOp &&
+    (condition.values.length === 0 ||
+      (isEmptinessOperator(derived) && (pendingOp === "is" || pendingOp === "is_not")))
+      ? pendingOp
+      : derived;
+  const operators = filterOperatorsFor(spec);
+  if (!operators.includes(operator)) operators.push(operator);
+  const operatorItems = operators.map((op) => ({ value: op, label: operatorLabel(op, spec.kind) }));
   const replace = (next: AdvancedFilterCondition) => onEdit(() => [next]);
+  const setValues = (next: AdvancedFilterCondition) => {
+    setPendingOp(operator);
+    replace(next);
+  };
   const fieldItem = (option: FieldOption) => (
     <SelectItem key={option.field} value={option.field} className="text-caption">
       {option.icon}
@@ -463,6 +554,7 @@ function ConditionRow({
         value={condition.field}
         onValueChange={(next) => {
           if (next && next !== condition.field) {
+            setPendingOp(null);
             replace({ ...condition, field: next, values: [], negated: false } as AdvancedFilterCondition);
           }
         }}
@@ -484,15 +576,19 @@ function ConditionRow({
       </Select>
       <Select
         items={operatorItems}
-        value={condition.negated ? "is_not" : "is"}
-        onValueChange={(next) => replace({ ...condition, negated: next === "is_not" })}
+        value={operator}
+        onValueChange={(next) => {
+          const op = next as FilterOperator;
+          setPendingOp(op);
+          replace(withConditionOperator(condition, spec, op));
+        }}
       >
         <SelectTrigger
           size="sm"
           aria-label={t(($) => $.filters.operator_label)}
-          className={cn(ROW_SELECT_CLASS, "w-20 shrink-0")}
+          className={cn(ROW_SELECT_CLASS, "w-32 shrink-0")}
         >
-          <SelectValue />
+          <SelectValue className="truncate" />
         </SelectTrigger>
         <SelectContent alignItemWithTrigger={false} align="start">
           {operatorItems.map((item) => (
@@ -502,16 +598,27 @@ function ConditionRow({
           ))}
         </SelectContent>
       </Select>
-      {isPropertyCondition(condition) ? (
+      {isEmptinessOperator(operator) ? (
+        <span className="min-w-0 flex-1" />
+      ) : isTypedValueKind(spec.kind) ? (
+        <TypedValueInput
+          kind={spec.kind}
+          value={conditionText(condition)}
+          onCommit={(text) => setValues(withConditionText(condition, operator, text))}
+        />
+      ) : isPropertyCondition(condition) ? (
         <PropertyValuePicker
           condition={condition}
-          property={fields.propertyById.get(propertyIdOfField(condition.field) ?? "")}
-          onChange={(values) => replace({ ...condition, values })}
+          property={property}
+          onChange={(values) => setValues({ ...condition, values })}
         />
       ) : (
-        <ValuePicker condition={condition} catalog={catalog} onChange={(values) => replace({ ...condition, values })} />
+        <ValuePicker condition={condition} catalog={catalog} onChange={(values) => setValues({ ...condition, values })} />
       )}
       <RowActions>
+        {onTurnIntoGroup && (
+          <DropdownMenuItem onClick={onTurnIntoGroup}>{t(($) => $.filters.advanced_turn_into_group)}</DropdownMenuItem>
+        )}
         <DropdownMenuItem
           disabled={!canAdd}
           onClick={() =>
@@ -537,6 +644,139 @@ function AddButton({ children, ...props }: React.ComponentProps<typeof Button>) 
       <Plus className="size-3.5" />
       {children}
     </Button>
+  );
+}
+
+/** A condition as a phrase: "Label includes any of Bug +1". */
+function useConditionPhrase(fields: ConditionFields, catalog: Catalog) {
+  const operatorLabel = useOperatorLabel();
+  const wsId = useWorkspaceId();
+  const { data: members = [] } = useQuery(memberListOptions(wsId));
+  const actorName = useMemo(() => buildChipActorNames(members, [], []), [members]);
+  const valueName = usePropertyValueName(actorName);
+  return (condition: AdvancedFilterCondition): string => {
+    const property = isPropertyCondition(condition)
+      ? fields.propertyById.get(propertyIdOfField(condition.field) ?? "")
+      : undefined;
+    const spec = filterFieldSpec(condition, property?.type);
+    const op = conditionOperator(condition, spec);
+    const head = `${fields.describe(condition.field).label} ${operatorLabel(op, spec.kind)}`;
+    if (isEmptinessOperator(op)) return head;
+    let value: string;
+    if (isTypedValueKind(spec.kind)) {
+      value = conditionText(condition);
+    } else if (isPropertyCondition(condition)) {
+      value = summarize(condition.values.map((v) => (property ? valueName(property, v) : undefined)));
+    } else {
+      const options = catalog(condition.field);
+      value = summarize(condition.values.map((v) => options.find((option) => option.value === v)?.label));
+    }
+    return `${head} ${value}`;
+  };
+}
+
+/** A pruned tree as one sentence, a group in parentheses. */
+function describeGroup(
+  group: AdvancedFilterGroup,
+  phrase: (condition: AdvancedFilterCondition) => string,
+  joinWord: (match: "all" | "any") => string,
+  nested = false,
+): string {
+  const parts = group.children.map((child) =>
+    child.type === "group" ? describeGroup(child, phrase, joinWord, true) : phrase(child),
+  );
+  const text = parts.join(` ${joinWord(group.match)} `);
+  return nested && parts.length > 1 ? `(${text})` : text;
+}
+
+/** A group under the root: its own match in the header, then its rows. An
+ *  empty group is a slot to add the first condition into. */
+function FilterGroupCard({
+  group,
+  fields,
+  catalog,
+  canAdd,
+  openAddMenu,
+  onAddMenuClosed,
+  edit,
+  onAppend,
+  onMatchChange,
+  onDelete,
+}: {
+  group: AdvancedFilterGroup;
+  fields: ConditionFields;
+  catalog: Catalog;
+  canAdd: boolean;
+  openAddMenu: boolean;
+  onAddMenuClosed: () => void;
+  edit: (id: string) => (fn: (node: AdvancedFilterNode) => AdvancedFilterNode[]) => void;
+  onAppend: (node: AdvancedFilterNode) => void;
+  onMatchChange: (match: "all" | "any") => void;
+  onDelete: () => void;
+}) {
+  const { t } = useT("issues");
+  const joinWord = useJoinWord();
+  const addMenu = (
+    <FieldPickerMenu
+      fields={fields}
+      heading={t(($) => $.filters.advanced_add_to_group)}
+      defaultOpen={openAddMenu && canAdd}
+      onOpenChange={(open) => {
+        if (!open) onAddMenuClosed();
+      }}
+      trigger={<AddButton disabled={!canAdd}>{t(($) => $.filters.advanced_add_condition)}</AddButton>}
+      onPick={(field) => {
+        onAddMenuClosed();
+        onAppend(createFilterCondition(field));
+      }}
+    />
+  );
+  return (
+    <div
+      className="flex min-w-0 flex-1 flex-col gap-1.5 rounded-lg border border-border bg-muted/40 p-2"
+      data-testid="advanced-filter-group"
+    >
+      <div className="flex items-center gap-1.5">
+        <span className="pl-1 text-caption text-muted-foreground">
+          {t(($) => $.filters.advanced_group_match_leading)}
+        </span>
+        <MatchSelect value={group.match} onChange={onMatchChange} />
+        <span className="min-w-0 flex-1 truncate text-caption text-muted-foreground">
+          {t(($) => $.filters.advanced_group_match_trailing)}
+        </span>
+        <RowActions>
+          <DropdownMenuItem variant="destructive" onClick={onDelete}>
+            {t(($) => $.filters.advanced_delete_group)}
+          </DropdownMenuItem>
+        </RowActions>
+      </div>
+      {group.children.length === 0 ? (
+        <div className="flex items-center gap-2 rounded-md border border-dashed border-border p-0.5">
+          {addMenu}
+          <span className="min-w-0 truncate text-caption text-muted-foreground">
+            {t(($) => $.filters.advanced_group_hint, { word: joinWord(group.match) })}
+          </span>
+        </div>
+      ) : (
+        <>
+          {group.children.map((child, index) =>
+            child.type === "condition" ? (
+              <div key={child.id} className="flex items-start gap-1.5">
+                <RowConnector index={index} match={group.match} />
+                <ConditionRow
+                  condition={child}
+                  fields={fields}
+                  catalog={catalog}
+                  canAdd={canAdd}
+                  onEdit={edit(child.id)}
+                />
+              </div>
+            ) : null,
+          )}
+          <div>{addMenu}</div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -570,6 +810,18 @@ export function AdvancedFilterPanel({
     ]);
   const setMatch = (groupId: string) => (match: "all" | "any") =>
     edit(groupId)((group) => [{ ...(group as AdvancedFilterGroup), match }]);
+  // The group whose add menu opens as it mounts: one just created or just
+  // made from a row. Cleared once a menu closes, so a remount stays shut.
+  const [openGroupId, setOpenGroupId] = useState<string | null>(null);
+  // A group is usually the other word: "and" rules holding an "or".
+  const newGroup = (children: AdvancedFilterNode[] = []) =>
+    createFilterGroup(root.match === "all" ? "any" : "all", children);
+  const phrase = useConditionPhrase(fields, catalog);
+  const joinWord = useJoinWord();
+  const pruned = pruneAdvancedFilter(root);
+  const summary = pruned?.children.some((child) => child.type === "group")
+    ? describeGroup(pruned, phrase, joinWord)
+    : null;
 
   return (
     <div className="flex flex-col">
@@ -591,7 +843,7 @@ export function AdvancedFilterPanel({
         )}
         {root.children.map((child, index) => (
           <div key={child.id} className="flex items-start gap-1.5" data-testid="advanced-filter-row">
-            <RowConnector index={index} group={root} editable={false} onMatchChange={setMatch(root.id)} />
+            <RowConnector index={index} match={root.match} />
             {child.type === "condition" ? (
               <ConditionRow
                 condition={child}
@@ -599,47 +851,33 @@ export function AdvancedFilterPanel({
                 catalog={catalog}
                 canAdd={canAdd}
                 onEdit={edit(child.id)}
+                onTurnIntoGroup={() => {
+                  const group = newGroup([child]);
+                  edit(child.id)(() => [group]);
+                  setOpenGroupId(group.id);
+                }}
               />
             ) : (
-              <div
-                className="flex min-w-0 flex-1 flex-col gap-1.5 rounded-lg border border-border bg-muted/40 p-2"
-                data-testid="advanced-filter-group"
-              >
-                {child.children.map((grandchild, inner) =>
-                  grandchild.type === "condition" ? (
-                    <div key={grandchild.id} className="flex items-start gap-1.5">
-                      <RowConnector
-                        index={inner}
-                        group={child}
-                        editable
-                        onMatchChange={setMatch(child.id)}
-                      />
-                      <ConditionRow
-                        condition={grandchild}
-                        fields={fields}
-                        catalog={catalog}
-                        canAdd={canAdd}
-                        onEdit={edit(grandchild.id)}
-                      />
-                    </div>
-                  ) : null,
-                )}
-                <div className="flex items-center justify-between">
-                  <FieldPickerMenu
-                    fields={fields}
-                    trigger={<AddButton disabled={!canAdd}>{t(($) => $.filters.advanced_add_condition)}</AddButton>}
-                    onPick={(field) => append(child.id, createFilterCondition(field))}
-                  />
-                  <RowActions>
-                    <DropdownMenuItem variant="destructive" onClick={() => edit(child.id)(() => [])}>
-                      {t(($) => $.filters.advanced_delete_group)}
-                    </DropdownMenuItem>
-                  </RowActions>
-                </div>
-              </div>
+              <FilterGroupCard
+                group={child}
+                fields={fields}
+                catalog={catalog}
+                canAdd={canAdd}
+                openAddMenu={openGroupId === child.id}
+                onAddMenuClosed={() => setOpenGroupId(null)}
+                edit={edit}
+                onAppend={(node) => append(child.id, node)}
+                onMatchChange={setMatch(child.id)}
+                onDelete={() => edit(child.id)(() => [])}
+              />
             )}
           </div>
         ))}
+        {summary && (
+          <p className="pt-1 text-caption text-pretty text-muted-foreground" data-testid="advanced-filter-summary">
+            {t(($) => $.filters.advanced_summary, { summary })}
+          </p>
+        )}
       </div>
 
       <div className="flex items-center gap-1 px-2 py-1.5">
@@ -648,17 +886,16 @@ export function AdvancedFilterPanel({
           trigger={<AddButton disabled={!canAdd}>{t(($) => $.filters.advanced_add_condition)}</AddButton>}
           onPick={(field) => append(root.id, createFilterCondition(field))}
         />
-        <FieldPickerMenu
-          fields={fields}
-          trigger={<AddButton disabled={!canAdd}>{t(($) => $.filters.advanced_add_group)}</AddButton>}
-          onPick={(field) =>
-            append(
-              root.id,
-              // A group is usually the other word: "and" rules holding an "or".
-              createFilterGroup(root.match === "all" ? "any" : "all", [createFilterCondition(field)]),
-            )
-          }
-        />
+        <AddButton
+          disabled={!canAdd}
+          onClick={() => {
+            const group = newGroup();
+            append(root.id, group);
+            setOpenGroupId(group.id);
+          }}
+        >
+          {t(($) => $.filters.advanced_add_group)}
+        </AddButton>
       </div>
 
       <div className="flex items-center gap-2 border-t border-border px-2 py-1.5">

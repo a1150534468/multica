@@ -13,6 +13,7 @@ import {
   type AdvancedFilterGroup,
   type DueDateFilter,
 } from "@multica/core/issues/stores/filter-tree";
+import { PROPERTY_FILTER_NONE_VALUE } from "@multica/core/issues/stores/filter-operators";
 import { todayDateOnly } from "@multica/core/issues/date";
 import type { IssueActivityState } from "../surface/activity";
 
@@ -112,7 +113,7 @@ export interface IssueRelationContext {
  * (`server/internal/handler/property.go`); cannot collide with a real option id
  * (select options are UUIDs, checkbox uses "true"/"false").
  */
-export const NO_PROPERTY_VALUE = "__none__";
+export const NO_PROPERTY_VALUE = PROPERTY_FILTER_NONE_VALUE;
 
 /**
  * Match one stored value against one operator filter member. Mirrors the

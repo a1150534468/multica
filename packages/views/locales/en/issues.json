@@ -244,7 +244,21 @@
     "advanced_clear": "Clear all",
     "advanced_empty": "No conditions yet. Add one to start filtering.",
     "advanced_conditions_one": "{{count}} condition",
-    "advanced_conditions_other": "{{count}} conditions"
+    "advanced_conditions_other": "{{count}} conditions",
+    "operator_has_any": "includes any of",
+    "operator_has_none": "includes none of",
+    "operator_contains": "contains",
+    "operator_not_contains": "doesn't contain",
+    "operator_before": "is before",
+    "operator_after": "is after",
+    "operator_empty": "is empty",
+    "operator_not_empty": "is not empty",
+    "advanced_group_match_leading": "Match",
+    "advanced_group_match_trailing": "of these",
+    "advanced_group_hint": "Conditions in this group are joined with “{{word}}”",
+    "advanced_add_to_group": "Add to group",
+    "advanced_turn_into_group": "Turn into group",
+    "advanced_summary": "Shows issues where {{summary}}"
   },
   "display": {
     "tooltip": "Display settings",
