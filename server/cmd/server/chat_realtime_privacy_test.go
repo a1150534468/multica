@@ -184,3 +184,90 @@ func TestChatRealtimeIsPrivateToSessionOwner(t *testing.T) {
 		t.Errorf("bystander lost task:completed, which drives agent presence; got %v", bystanderTypes)
 	}
 }
+
+// Removal from a workspace must stop that workspace's chat content even while
+// the creator stays connected to another workspace. That connection is
+// authorized against its own workspace only, so user-scope delivery would
+// carry the agent's transcript and reply past the removal.
+func TestChatRealtimeStopsAtWorkspaceRemoval(t *testing.T) {
+	ctx := context.Background()
+	fx := workspaceFixture(t)
+	creatorID := fx.User(t, "Removed chat creator", "chat-removed-creator@example.test")
+	memberID := fx.Member(t, testWorkspaceID, creatorID, "member")
+	otherWS := fx.Workspace(t, "Still accessible workspace", "chat-removal-other-workspace")
+	fx.Member(t, otherWS, creatorID, "owner")
+	var runtimeID string
+	fx.QueryRow(t, `SELECT runtime_id FROM agent WHERE workspace_id=$1 AND name='Integration Test Agent'`, testWorkspaceID).Scan(&runtimeID)
+	agentID := fx.Agent(t, "Workspace shared agent", runtimeID, testutil.Cols{
+		"visibility": "workspace", "permission_mode": "public_to",
+	})
+	fx.Insert(t, "agent_invocation_target", testutil.Cols{
+		"agent_id": agentID, "target_type": "workspace", "target_id": testWorkspaceID,
+	})
+
+	hub := realtime.NewHub()
+	go hub.Run()
+	bus := events.New()
+	registerListeners(bus, hub)
+	router, h := NewRouterWithOptions(testPool, hub, bus, analytics.NoopClient{}, nil, RouterOptions{})
+	server := httptest.NewServer(router)
+	t.Cleanup(server.Close)
+	other, creatorToken := realtimeMembershipConn(t, server, creatorID, otherWS)
+
+	var session struct {
+		ID string `json:"id"`
+	}
+	chatPrivacyRequest(t, server, creatorToken, http.MethodPost, "/api/chat/sessions",
+		map[string]any{"agent_id": agentID}, &session)
+	t.Cleanup(func() {
+		testPool.Exec(context.Background(), `DELETE FROM agent_task_queue WHERE chat_session_id=$1`, session.ID)
+		testPool.Exec(context.Background(), `DELETE FROM chat_session WHERE id=$1`, session.ID)
+	})
+	var sent struct {
+		TaskID string `json:"task_id"`
+	}
+	chatPrivacyRequest(t, server, creatorToken, http.MethodPost, "/api/chat/sessions/"+session.ID+"/messages",
+		map[string]any{"content": "read workspace documents"}, &sent)
+	fx.Exec(t, `UPDATE agent_task_queue SET status='running', dispatched_at=now(), started_at=now() WHERE id=$1`, sent.TaskID)
+	bus.Publish(events.Event{Type: protocol.EventIssueUpdated, WorkspaceID: otherWS, Payload: map[string]string{}})
+	readChatPrivacyFrames(t, other, protocol.EventIssueUpdated)
+
+	// Use the actual removal API. The shared agent/runtime belongs to the
+	// workspace owner, so this member's removal does not cancel the task.
+	chatPrivacyRequest(t, server, testToken, http.MethodDelete,
+		"/api/workspaces/"+testWorkspaceID+"/members/"+memberID, nil, nil)
+	if fx.Count(t, `SELECT count(*) FROM member WHERE id=$1`, memberID) != 0 {
+		t.Fatal("membership was not removed")
+	}
+	if fx.Count(t, `SELECT count(*) FROM agent_task_queue WHERE id=$1 AND status='running'`, sent.TaskID) != 1 {
+		t.Fatal("shared-agent task unexpectedly stopped")
+	}
+	req, _ := http.NewRequest(http.MethodGet, server.URL+"/api/tasks/"+sent.TaskID+"/messages", nil)
+	req.Header.Set("Authorization", "Bearer "+creatorToken)
+	req.Header.Set("X-Workspace-ID", testWorkspaceID)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden && resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("removed member's REST read: got %d, want 403 or 404", resp.StatusCode)
+	}
+
+	const secret = "workspace-secret-after-membership-was-revoked"
+	report := testutil.JSONRequest(http.MethodPost, "/api/daemon/tasks/"+sent.TaskID+"/messages",
+		map[string]any{"messages": []any{map[string]any{"seq": 1, "type": "text", "content": secret}}})
+	report = testutil.WithURLParams(report, "taskId", sent.TaskID)
+	report.Header.Set("X-User-ID", testUserID)
+	testutil.Call(t, h.ReportTaskMessages, report).Want(http.StatusOK)
+	result, _ := json.Marshal(map[string]string{"output": secret})
+	if _, err := h.TaskService.CompleteTask(ctx, util.MustParseUUID(sent.TaskID), result, "", "", "", false, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	bus.Publish(events.Event{Type: protocol.EventIssueUpdated, WorkspaceID: otherWS, Payload: map[string]string{}})
+	for _, frame := range readChatPrivacyFrames(t, other, protocol.EventIssueUpdated) {
+		if strings.Contains(frame.raw, secret) {
+			t.Errorf("removed member received old-workspace content via other-workspace socket: %s", frame.raw)
+		}
+	}
+}

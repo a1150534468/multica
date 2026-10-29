@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/multica-ai/multica/server/internal/events"
+	"github.com/multica-ai/multica/server/internal/realtime"
 	"github.com/multica-ai/multica/server/pkg/protocol"
 )
 
@@ -33,16 +34,11 @@ func TestRegisterListeners_ChatSessionCreatedGoesOnlyToCreator(t *testing.T) {
 		},
 	})
 
-	if len(fb.workspaceCalls) != 0 {
-		t.Fatalf("private Chat create reached workspace fanout: %+v", fb.workspaceCalls)
-	}
-	if len(fb.userCalls) != 1 || fb.userCalls[0].userID != "creator-1" {
-		t.Fatalf("creator fanout = %+v, want creator-1 once", fb.userCalls)
-	}
+	msg := onlyOwnerWorkspaceFrame(t, fb, "ws-1", "creator-1")
 	var frame struct {
 		Payload protocol.ChatSessionCreatedPayload `json:"payload"`
 	}
-	if err := json.Unmarshal(fb.userCalls[0].msg, &frame); err != nil {
+	if err := json.Unmarshal(msg, &frame); err != nil {
 		t.Fatalf("decode creator frame: %v", err)
 	}
 	if frame.Payload.WorkspaceID != "ws-1" || frame.Payload.ChatSessionID != "chat-1" {
@@ -63,12 +59,26 @@ func TestRegisterListeners_ChatSessionTitleUpdateGoesOnlyToCreator(t *testing.T)
 		},
 	})
 
-	if len(fb.workspaceCalls) != 0 {
-		t.Fatalf("private Chat title reached workspace fanout: %+v", fb.workspaceCalls)
+	onlyOwnerWorkspaceFrame(t, fb, "ws-1", "creator-1")
+}
+
+// onlyOwnerWorkspaceFrame asserts that the one delivery went to ownerID's
+// connections bound to workspaceID, and returns its frame. The user scope
+// would also reach the owner's connections to other workspaces, which are not
+// re-authorized against workspaceID.
+func onlyOwnerWorkspaceFrame(t *testing.T, fb *fakeBroadcaster, workspaceID, ownerID string) []byte {
+	t.Helper()
+	fb.mu.Lock()
+	defer fb.mu.Unlock()
+	if len(fb.workspaceCalls) != 0 || len(fb.userCalls) != 0 || fb.broadcastCalled != 0 {
+		t.Fatalf("chat content left the owner's workspace connections: workspace=%+v user=%+v broadcast=%d",
+			fb.workspaceCalls, fb.userCalls, fb.broadcastCalled)
 	}
-	if len(fb.userCalls) != 1 || fb.userCalls[0].userID != "creator-1" {
-		t.Fatalf("creator fanout = %+v, want creator-1 once", fb.userCalls)
+	want := realtime.WorkspaceMemberScopeID(workspaceID, ownerID)
+	if len(fb.scopeCalls) != 1 || fb.scopeCalls[0].scopeType != realtime.ScopeWorkspaceMember || fb.scopeCalls[0].scopeID != want {
+		t.Fatalf("scope fanout = %+v, want %s/%s once", fb.scopeCalls, realtime.ScopeWorkspaceMember, want)
 	}
+	return fb.scopeCalls[0].msg
 }
 
 type scopeCall struct {
@@ -184,18 +194,12 @@ func TestRegisterListeners_ChatContentGoesOnlyToSessionOwner(t *testing.T) {
 				Payload: map[string]any{"content": "private chat content"},
 			})
 
-			if len(fb.workspaceCalls) != 0 || len(fb.scopeCalls) != 0 || fb.broadcastCalled != 0 {
-				t.Fatalf("chat content left the owner: workspace=%+v scope=%+v broadcast=%d",
-					fb.workspaceCalls, fb.scopeCalls, fb.broadcastCalled)
-			}
-			if len(fb.userCalls) != 1 || fb.userCalls[0].userID != "owner-1" || len(fb.userCalls[0].exclude) != 0 {
-				t.Fatalf("user fanout = %+v, want owner-1 once on every connection", fb.userCalls)
-			}
+			msg := onlyOwnerWorkspaceFrame(t, fb, "ws-1", "owner-1")
 			var frame struct {
 				Type    string         `json:"type"`
 				Payload map[string]any `json:"payload"`
 			}
-			if err := json.Unmarshal(fb.userCalls[0].msg, &frame); err != nil {
+			if err := json.Unmarshal(msg, &frame); err != nil {
 				t.Fatalf("decode owner frame: %v", err)
 			}
 			if frame.Type != tc.eventType || frame.Payload["content"] != "private chat content" {
@@ -205,26 +209,32 @@ func TestRegisterListeners_ChatContentGoesOnlyToSessionOwner(t *testing.T) {
 	}
 }
 
-// A producer that cannot name the owner must not fall back to workspace
-// fanout: the owner refetches on the next lifecycle event, a leak is permanent.
+// A producer that cannot name the owner and workspace must not fall back to a
+// wider fanout: the owner refetches on the next lifecycle event, a leak is
+// permanent.
 func TestRegisterListeners_ChatContentWithoutOwnerIsDropped(t *testing.T) {
 	for _, tc := range chatPrivateCases {
-		t.Run(tc.eventType, func(t *testing.T) {
-			bus := events.New()
-			fb := &fakeBroadcaster{}
-			registerListeners(bus, fb)
+		for _, missing := range []struct{ name, workspaceID, ownerID string }{
+			{"no owner", "ws-1", ""},
+			{"no workspace", "", "owner-1"},
+		} {
+			t.Run(tc.eventType+"/"+missing.name, func(t *testing.T) {
+				bus := events.New()
+				fb := &fakeBroadcaster{}
+				registerListeners(bus, fb)
 
-			bus.Publish(events.Event{
-				Type: tc.eventType, WorkspaceID: "ws-1", ActorType: "system",
-				TaskID: tc.taskID, ChatSessionID: "chat-1",
-				Payload: map[string]any{"content": "private chat content"},
+				bus.Publish(events.Event{
+					Type: tc.eventType, WorkspaceID: missing.workspaceID, ActorType: "system",
+					TaskID: tc.taskID, ChatSessionID: "chat-1", ChatSessionOwnerID: missing.ownerID,
+					Payload: map[string]any{"content": "private chat content"},
+				})
+
+				if len(fb.workspaceCalls) != 0 || len(fb.userCalls) != 0 || len(fb.scopeCalls) != 0 || fb.broadcastCalled != 0 {
+					t.Fatalf("unroutable chat event was delivered: workspace=%+v user=%+v scope=%+v broadcast=%d",
+						fb.workspaceCalls, fb.userCalls, fb.scopeCalls, fb.broadcastCalled)
+				}
 			})
-
-			if len(fb.workspaceCalls) != 0 || len(fb.userCalls) != 0 || len(fb.scopeCalls) != 0 || fb.broadcastCalled != 0 {
-				t.Fatalf("ownerless chat event was delivered: workspace=%+v user=%+v scope=%+v broadcast=%d",
-					fb.workspaceCalls, fb.userCalls, fb.scopeCalls, fb.broadcastCalled)
-			}
-		})
+		}
 	}
 }
 

@@ -250,16 +250,26 @@ func registerListeners(bus *events.Bus, b realtime.Broadcaster) {
 		}
 
 		// A chat session is creator-private: its events and its tasks'
-		// transcript go to the creator's own connections only. The user scope
-		// is joined at connect time, so this needs no client subscribe frame.
-		// Without a known owner the event is dropped, never widened.
+		// transcript go only to the creator's connections bound to the
+		// session's workspace. Not the whole user scope: a connection to
+		// another workspace is authorized against that workspace, so it would
+		// keep receiving this content after the creator is removed from this
+		// one. The scope is joined at connect time, so this needs no client
+		// subscribe frame. Without a known owner and workspace the event is
+		// dropped, never widened.
 		if isChatPrivateEvent(e) {
-			if e.ChatSessionOwnerID == "" {
+			if e.ChatSessionOwnerID == "" || e.WorkspaceID == "" {
 				slog.Warn("realtime: dropping chat event without session owner",
 					"event_type", e.Type, "chat_session_id", e.ChatSessionID, "task_id", e.TaskID)
 				return
 			}
-			sendToRecipient(b, e, e.ChatSessionOwnerID)
+			data, err := json.Marshal(map[string]any{"type": e.Type, "payload": projectOutbound(e.Type, e.Payload), "actor_id": e.ActorID, "actor_type": e.ActorType})
+			if err != nil {
+				slog.Error("failed to marshal event", "event_type", e.Type, "error", err)
+				return
+			}
+			realtime.M.RecordEvent(e.Type)
+			b.BroadcastToScope(realtime.ScopeWorkspaceMember, realtime.WorkspaceMemberScopeID(e.WorkspaceID, e.ChatSessionOwnerID), data)
 			return
 		}
 
